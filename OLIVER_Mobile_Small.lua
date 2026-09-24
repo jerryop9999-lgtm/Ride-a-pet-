@@ -13,6 +13,37 @@ local function setupTouchButton(button)
     end
 end
 
+-- One-finger tap handler: use the button's own input so ScrollingFrame/drag
+-- handling cannot require a second finger. Touch activates on release.
+local function connectTap(button, callback)
+    if not button then return end
+    setupTouchButton(button)
+    local activeTouch = nil
+    local activeMouse = false
+
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            activeTouch = input
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            activeMouse = true
+        end
+    end)
+
+    button.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            if activeTouch == input then
+                activeTouch = nil
+                callback()
+            end
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if activeMouse then
+                activeMouse = false
+                callback()
+            end
+        end
+    end)
+end
+
 local LocalPlayer = Players.LocalPlayer
 
 -- Ride A Pet: Eggs are rendered under Workspace.RenderedEggs
@@ -168,7 +199,7 @@ MainScroll.ClipsDescendants = true
 MainScroll.ZIndex = 5
 MainScroll.Parent = MainFrame
 
-ToggleBtn.Activated:Connect(function()
+connectTap(ToggleBtn, function()
     MainFrame.Visible = not MainFrame.Visible
     ToggleBtn.Text = "OLIVER"
 end)
@@ -356,7 +387,7 @@ local function addReturnOption(textValue, order)
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 5)
     c.Parent = b
-    b.Activated:Connect(function()
+    connectTap(b, function()
         returnMode = textValue
         ReturnBtn.Text = textValue .. "  ∨"
         ReturnList.Visible = false
@@ -365,7 +396,7 @@ end
 addReturnOption("Start Position", 1)
 addReturnOption("Base", 2)
 
-ReturnBtn.Activated:Connect(function()
+connectTap(ReturnBtn, function()
     EggList.Visible = false
     EggPage.Visible = false
     MainScroll.CanvasPosition = Vector2.new(0, 0)
@@ -549,7 +580,7 @@ local function refreshEggList()
 
         redraw()
 
-        b.Activated:Connect(function()
+        connectTap(b, function()
             if eggType == "All" then
                 -- All = every rarity selected. Clicking again clears all.
                 if selectedEggs.All then
@@ -587,7 +618,7 @@ end
 updateEggTypeButtonText()
 MainScroll.CanvasSize = UDim2.new(0, 0, 0, 570)
 
-SelectEggBtn.Activated:Connect(function()
+connectTap(SelectEggBtn, function()
     if not EggList.Visible then
         MainScroll.CanvasPosition = Vector2.new(0, 0)
         refreshEggList()
@@ -1728,10 +1759,10 @@ local function closeEggMainFrame()
 end
 
 -- Open the separate Egg UI directly from the OLIVER UI.
-EggPageBtn.Activated:Connect(openEggMainFrame)
+connectTap(EggPageBtn, openEggMainFrame)
 
 -- X only closes the Egg UI; OLIVER MainFrame stays open.
-EggMainClose.Activated:Connect(closeEggMainFrame)
+connectTap(EggMainClose, closeEggMainFrame)
 
 task.spawn(function()
     while ScreenGui.Parent do
@@ -1944,7 +1975,7 @@ local function stealOneEgg(egg)
     stealBusy = false
 end
 
-AutoStealBtn.Activated:Connect(function()
+connectTap(AutoStealBtn, function()
     autoSteal = not autoSteal
 
     if autoSteal then
@@ -2227,7 +2258,7 @@ local function applyESP()
     end)
 end
 
-EspEggBtn.Activated:Connect(function()
+connectTap(EspEggBtn, function()
     isEspEgg = not isEspEgg
     if isEspEgg then
         EspEggBtn.Text = "ESP EGG | ON"
