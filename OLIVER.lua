@@ -675,8 +675,10 @@ local function findPlayerBase()
             local part = findReturnPart(obj)
 
             if part then
-                -- Strong preference for an explicitly-owned candidate.
-                if score > cachedBaseScore then
+                -- Prefer bases that are explicitly owned by the local player.
+                -- Do not pick an arbitrary object merely because its name contains
+                -- "base"/"plot"/"ranch".
+                if score > cachedBaseScore and candidateOwnerMatch(obj) > 0 then
                     cachedBaseScore = score
                     cachedBasePart = part
                 end
@@ -685,9 +687,9 @@ local function findPlayerBase()
     end
 
     if cachedBasePart then
-        print("[OLIVER] Base found:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+        print("[OLIVER] Owned Base found:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
     else
-        warn("[OLIVER] Player Base/Ranch was not found")
+        warn("[OLIVER] Explicitly-owned Base/Ranch was not found")
     end
 
     return cachedBasePart
@@ -920,14 +922,33 @@ local function returnAfterSuccess()
     if returnMode == "Base" then
         local baseCFrame = getRanchCFrame()
         if baseCFrame then
-            return teleportCharacter(baseCFrame)
+            local ok = teleportCharacter(baseCFrame, 2.5)
+            if ok then
+                StealStatus.Text = "Status: Returned to Base ✓"
+                return true
+            end
         end
-        warn("[OLIVER] Base return point not found; staying at egg")
+
+        -- Fallback: when the game does not expose a readable owner marker for
+        -- the player's Base, return to the exact position where Auto Steal was
+        -- enabled. In normal use this is the player's Base area.
+        if autoStealStartCFrame then
+            warn("[OLIVER] Owned Base could not be identified; using Start Position fallback")
+            teleportCharacter(autoStealStartCFrame, 0.05)
+            StealStatus.Text = "Status: Base not detected — returned to Start ✓"
+            return true
+        end
+
+        warn("[OLIVER] Base and Start Position were both unavailable")
         return false
     end
 
     if autoStealStartCFrame then
-        return teleportCharacter(autoStealStartCFrame)
+        local ok = teleportCharacter(autoStealStartCFrame, 0.05)
+        if ok then
+            StealStatus.Text = "Status: Returned to Start ✓"
+        end
+        return ok
     end
 
     return false
@@ -970,9 +991,13 @@ local function stealOneEgg(egg)
 
         if success then
             StealStatus.Text = "Status: Ownership confirmed ✓"
-            returnAfterSuccess()
-            -- Stay at Base/Start Position for 1 second before searching for the next Egg.
-            task.wait(1.0)
+            local returned = returnAfterSuccess()
+            -- Only begin the next Egg cycle after the return has actually happened.
+            if returned then
+                task.wait(1.0)
+            else
+                task.wait(0.5)
+            end
         else
             StealStatus.Text = "Status: Ownership NOT confirmed — waiting"
             -- Do not immediately fire the same prompt again. Give the game a
