@@ -786,12 +786,25 @@ local function lockToEgg(eggPart, heightOffset)
     end
 end
 
--- ==================== HATCH LUCK PRIORITY ====================
--- Read Hatch Luck from attributes / ValueObjects / Billboard text when the
--- game exposes it. Values such as 90K, 500K, 1M, 2.5M are converted to numbers.
+-- ==================== EGG LUCK / HATCH LUCK PRIORITY ====================
+-- IMPORTANT:
+-- Ride A Pet has TWO different luck concepts:
+--   1) Egg Luck = the Luck value printed on each map Egg (30, 50, 1K, 1M, ...)
+--   2) Player Hatch Luck = the player's global Hatch Luck upgrade.
+-- Player Hatch Luck is the same modifier for all Eggs, so it cannot be used
+-- to rank Eggs against each other. Auto Steal therefore ranks by EGG LUCK.
+--
+-- The game can expose Egg Luck through attributes, ValueObjects, BillboardGui
+-- text, or only through the egg's known name. We check all of those paths.
+
 local function parseLuckNumber(value)
     if value == nil then return nil end
-    local text = tostring(value):lower():gsub(",", ""):gsub("%s+", "")
+
+    local text = tostring(value):lower()
+        :gsub(",", "")
+        :gsub("%s+", "")
+
+    -- Accept "1k", "1.5m", "1000000", etc.
     local n, suffix = text:match("([%d%.]+)([kmbt]?)")
     if not n then return nil end
 
@@ -804,39 +817,36 @@ local function parseLuckNumber(value)
     elseif suffix == "b" then mult = 1e9
     elseif suffix == "t" then mult = 1e12
     end
+
     return n * mult
 end
 
-local function getHatchLuck(egg)
-    if not egg then return 0 end
+local function readLuckFromObject(obj)
+    if not obj then return nil end
 
-    -- Hatch Luck can be stored on the Egg itself OR on a parent/child
-    -- container depending on the game version. Check the Egg first, then
-    -- nearby descendants/ancestors so Auto Steal does not miss a visible Luck.
-    local attrNames = {
-        "HatchLuck", "Hatch Luck", "Hatch_Luck", "HatchLuckValue",
-        "Luck", "EggLuck", "LuckValue", "HatchLuckPercent"
+    local names = {
+        "Luck", "EggLuck", "Egg_Luck", "LuckValue",
+        "BaseLuck", "Base_Luck", "HatchLuck", "Hatch_Luck"
     }
 
-    local function readAttributes(obj)
-        if not obj then return nil end
-        for _, name in ipairs(attrNames) do
-            local ok, value = pcall(function() return obj:GetAttribute(name) end)
-            if ok and value ~= nil then
-                local n = parseLuckNumber(value)
-                if n then return n end
-            end
+    for _, name in ipairs(names) do
+        local ok, value = pcall(function()
+            return obj:GetAttribute(name)
+        end)
+        if ok and value ~= nil then
+            local n = parseLuckNumber(value)
+            if n then return n end
         end
-        return nil
     end
 
-    local direct = readAttributes(egg)
-    if direct then return direct end
+    for _, d in ipairs(obj:GetDescendants()) do
+        local key = d.Name:lower():gsub("[%s_%-]", "")
+        if key == "luck"
+            or key == "eggluck"
+            or key == "luckvalue"
+            or key == "baseluck"
+            or key == "hatchluck" then
 
-    -- ValueObjects with Luck/HatchLuck names.
-    for _, d in ipairs(egg:GetDescendants()) do
-        local lower = d.Name:lower():gsub("[%s_%-]", "")
-        if lower:find("hatchluck", 1, true) or lower == "luck" or lower == "eggluck" or lower == "luckvalue" then
             if d:IsA("StringValue") or d:IsA("IntValue") or d:IsA("NumberValue") then
                 local n = parseLuckNumber(d.Value)
                 if n then return n end
@@ -844,32 +854,109 @@ local function getHatchLuck(egg)
         end
     end
 
-    -- Some builds put the Luck attribute on the immediate parent folder/model.
-    local parent = egg.Parent
-    for _ = 1, 3 do
-        if not parent or parent == Workspace then break end
-        local n = readAttributes(parent)
-        if n then return n end
-        parent = parent.Parent
-    end
+    return nil
+end
 
-    -- Finally read displayed text. Supports examples like:
-    -- "Hatch Luck: 2.5M", "Luck 500K", "Hatch Luck +90K".
-    local bestTextLuck = nil
-    for _, d in ipairs(egg:GetDescendants()) do
+local function readLuckFromVisibleText(obj)
+    if not obj then return nil end
+
+    local best = nil
+
+    for _, d in ipairs(obj:GetDescendants()) do
         if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
             local txt = tostring(d.Text or "")
             local lower = txt:lower()
-            if lower:find("luck", 1, true) or lower:find("hatch", 1, true) then
-                local numberText = txt:match("([%d%.]+%s*[kKmMbBtT]?)")
-                local n = parseLuckNumber(numberText)
-                if n and (not bestTextLuck or n > bestTextLuck) then
-                    bestTextLuck = n
+
+            -- Prefer text that explicitly describes Luck.
+            if lower:find("luck", 1, true) then
+                -- Examples:
+                -- "Luck: 1K"
+                -- "1K Luck"
+                -- "Hatch Luck 1.5M"
+                -- "x1.5M Luck"
+                for numberText in txt:gmatch("([%d%.]+%s*[kKmMbBtT]?)") do
+                    local n = parseLuckNumber(numberText)
+                    if n and (not best or n > best) then
+                        best = n
+                    end
                 end
             end
         end
     end
-    return bestTextLuck or 0
+
+    return best
+end
+
+-- Known Ride A Pet map-Egg Luck values.
+-- This is a FALLBACK only when the live object does not expose its Luck.
+-- Live attributes/UI are always preferred first.
+local KnownEggLuck = {
+    ["White Egg"] = 1,
+    ["Brown Egg"] = 5,
+    ["Cracked Egg"] = 30,
+    ["Easter Egg"] = 50,
+    ["Stone Egg"] = 100,
+    ["Leaf Egg"] = 200,
+    ["Mushroom Egg"] = 500,
+    ["Flower Egg"] = 750,
+    ["Slime Egg"] = 1000,
+    ["Ice Egg"] = 3000,
+    ["Glass Egg"] = 10000,
+    ["Golden Egg"] = 30000,
+    ["Diamond Egg"] = 90000,
+    ["Crystal Egg"] = 150000,
+    ["Skull Egg"] = 250000,
+    ["Asterold Egg"] = 500000,
+    ["Asteroid Egg"] = 500000,
+    ["Dominus Egg"] = 700000,
+    ["Flaming Egg"] = 1000000,
+    ["Sinister Egg"] = 3000000,
+    ["Soul Egg"] = 7000000,
+    ["Aurora Egg"] = 300000000,
+    ["Galaxy Egg"] = 1500000000,
+    ["Black Hole Egg"] = 100000000000,
+    ["Blackhole Egg"] = 100000000000,
+    ["Cherub Egg"] = 1000000000000,
+}
+
+local function getEggLuck(egg)
+    if not egg then return 0 end
+
+    -- 1) Direct live metadata.
+    local direct = readLuckFromObject(egg)
+    if direct then return direct end
+
+    -- 2) Visible Luck text attached to the Egg.
+    local visible = readLuckFromVisibleText(egg)
+    if visible then return visible end
+
+    -- 3) Check a few ancestors for metadata/UI containers.
+    local parent = egg.Parent
+    for _ = 1, 4 do
+        if not parent or parent == Workspace then break end
+
+        local n = readLuckFromObject(parent)
+        if n then return n end
+
+        local textLuck = readLuckFromVisibleText(parent)
+        if textLuck then return textLuck end
+
+        parent = parent.Parent
+    end
+
+    -- 4) Known Egg-name fallback.
+    local exact = KnownEggLuck[egg.Name]
+    if exact then return exact end
+
+    -- Case-insensitive fallback for renamed/cased variants.
+    local lowerName = egg.Name:lower()
+    for name, luck in pairs(KnownEggLuck) do
+        if lowerName == name:lower() then
+            return luck
+        end
+    end
+
+    return 0
 end
 
 local RarityPriority = {
@@ -883,9 +970,7 @@ local RarityPriority = {
 }
 
 local function findTargetEgg()
-    -- Scan BOTH the live RenderedEggs container and Egg models placed directly
-    -- in the game Map/Workspace. Some versions of Ride A Pet expose eggs in
-    -- the map before/while they are mirrored into RenderedEggs.
+    -- Scan BOTH the live RenderedEggs container and Egg models placed in Map.
     RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
 
     local candidates = {}
@@ -899,8 +984,6 @@ local function findTargetEgg()
         local nameLower = egg.Name:lower()
         local looksLikeEgg = nameLower:find("egg") ~= nil
 
-        -- For Map eggs, require an actual Steal prompt and egg part so we do
-        -- not mistake decorative/static egg models for stealable eggs.
         local part = getEggPart(egg)
         local prompt = getStealPrompt(egg)
         if not part or not prompt then return end
@@ -909,15 +992,16 @@ local function findTargetEgg()
         local rarity = getEggType(egg)
         if not isEggTypeSelected(rarity) then return end
 
+        local eggLuck = getEggLuck(egg)
+
         seen[egg] = true
         table.insert(candidates, {
             egg = egg,
-            luck = getHatchLuck(egg),
+            eggLuck = eggLuck,
             rarityPriority = RarityPriority[rarity] or 0,
         })
     end
 
-    -- 1) Normal live eggs.
     if RenderedEggs then
         for _, egg in ipairs(RenderedEggs:GetChildren()) do
             if isValidEgg(egg) then
@@ -926,9 +1010,6 @@ local function findTargetEgg()
         end
     end
 
-    -- 2) Eggs physically placed in the Map/Workspace. We scan descendants
-    -- but only accept Model + Egg name + real ProximityPrompt, which keeps
-    -- the scan from selecting unrelated map decorations.
     local map = Workspace:FindFirstChild("Map")
     if map then
         for _, obj in ipairs(map:GetDescendants()) do
@@ -938,22 +1019,28 @@ local function findTargetEgg()
         end
     end
 
-    -- IMPORTANT: Auto Steal always checks Hatch Luck before choosing an Egg.
-    -- Highest Hatch Luck wins. If Luck is unavailable/equal, rarity is the
-    -- deterministic tie-breaker, then Egg name.
+    -- HIGHEST EGG LUCK FIRST.
+    -- Player Hatch Luck is a global modifier and is NOT used as the ranking
+    -- value because it would be identical across all Eggs.
     table.sort(candidates, function(a, b)
-        if a.luck ~= b.luck then
-            return a.luck > b.luck
+        if a.eggLuck ~= b.eggLuck then
+            return a.eggLuck > b.eggLuck
         end
+
         if a.rarityPriority ~= b.rarityPriority then
             return a.rarityPriority > b.rarityPriority
         end
+
         return a.egg.Name < b.egg.Name
     end)
 
     local target = candidates[1]
     if target then
-        print(string.format("[OLIVER] Auto Steal target: %s | Hatch Luck: %s", target.egg.Name, tostring(target.luck)))
+        print(string.format(
+            "[OLIVER] Auto Steal target: %s | Egg Luck: %s",
+            target.egg.Name,
+            tostring(target.eggLuck)
+        ))
         return target.egg
     end
 
