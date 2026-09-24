@@ -733,6 +733,36 @@ local function teleportCharacter(cf, heightOffset)
     return false
 end
 
+-- Keep the character attached/hovering over the current Egg while the steal
+-- interaction is being confirmed. This is especially important for Eggs that
+-- spawn on trees or other places with no floor underneath.
+local function lockToEgg(eggPart, heightOffset)
+    local connection
+    local offset = heightOffset or 1.25
+
+    connection = RunService.Heartbeat:Connect(function()
+        if not autoSteal or not eggPart or not eggPart.Parent then
+            if connection then connection:Disconnect() end
+            return
+        end
+
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = eggPart.CFrame + Vector3.new(0, offset, 0)
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+
+    return function()
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end
+
 local function findTargetEgg()
     RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
     if not RenderedEggs then return nil end
@@ -749,19 +779,34 @@ local function findTargetEgg()
 end
 
 local function waitForEggTaken(egg, timeout)
-    local deadline = os.clock() + (timeout or 1.5)
+    -- Confirm the pickup state first. We do NOT return to Base merely because
+    -- the prompt was triggered. The Egg must actually leave RenderedEggs and
+    -- remain gone for a short settle window.
+    local deadline = os.clock() + (timeout or 4)
 
     while os.clock() < deadline do
         if not autoSteal then
             return false
         end
 
-        -- Normal success signal: Egg leaves/reparents from RenderedEggs.
-        if not egg or not egg.Parent or not RenderedEggs or not egg:IsDescendantOf(RenderedEggs) then
-            return true
+        local removed = (not egg) or (not egg.Parent) or (not RenderedEggs)
+            or (not egg:IsDescendantOf(RenderedEggs))
+
+        if removed then
+            -- Fast confirmation: give the game a tiny replication window, then
+            -- verify the Egg is still gone. This avoids returning before the
+            -- pickup state has settled while keeping pickup response fast.
+            task.wait(0.08)
+
+            local stillGone = (not egg) or (not egg.Parent) or (not RenderedEggs)
+                or (not egg:IsDescendantOf(RenderedEggs))
+
+            if stillGone then
+                return true
+            end
         end
 
-        task.wait(0.02)
+        task.wait(0.01)
     end
 
     return false
@@ -811,8 +856,11 @@ local function stealOneEgg(egg)
 
     if eggPart and prompt then
         -- Hover just a little above the Egg, close enough for the prompt.
-        teleportCharacter(eggPart.CFrame, 2.2)
-        task.wait(0.02)
+        -- Keep the character locked to the Egg so tree/high-place Eggs cannot
+        -- make the character fall while the pickup is being confirmed.
+        teleportCharacter(eggPart.CFrame, 1.25)
+        local releaseEggLock = lockToEgg(eggPart, 1.25)
+        task.wait(0.005)
 
         -- Hold 0.0s. Roblox documents HoldDuration=0 as immediate activation.
         pcall(function()
@@ -831,16 +879,13 @@ local function stealOneEgg(egg)
         end
 
         -- Wait for the normal Egg removal/reparent signal first.
-        success = waitForEggTaken(egg, 1.25)
+        success = waitForEggTaken(egg, 4)
+        releaseEggLock()
 
-        -- Some Ride A Pet states keep the rendered Egg instance alive briefly even
-        -- after the Steal interaction has succeeded. Since the prompt was actually
-        -- triggered, give the game a short settle window before deciding it failed.
-        if not success and autoSteal then
-            task.wait(0.25)
-            success = true
-        end
-
+        -- IMPORTANT: A triggered prompt is NOT proof that the Egg was taken.
+        -- Only continue when the Egg actually leaves/reparents out of RenderedEggs.
+        -- Do not use a time-based fallback here, otherwise the script can return
+        -- to Base before the Egg is actually ours.
         if success then
             -- Never start the next Egg until Return has completed.
             local returned = returnAfterSuccess()
@@ -855,7 +900,13 @@ local function stealOneEgg(egg)
                 warn("[OLIVER] Return failed; Auto Steal paused to prevent repeated Steal")
             end
         else
-            warn("[OLIVER] Steal did not settle; not returning")
+            -- Hard stop: do not retry the same Egg in a tight loop and do not
+            -- return to Base until the pickup is actually observed.
+            warn("[OLIVER] Egg was NOT confirmed taken after 6s; Auto Steal paused")
+            autoSteal = false
+            AutoStealBtn.Text = "Auto Steal | PAUSED"
+            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
+            setMovementLocked(false)
         end
     end
 
