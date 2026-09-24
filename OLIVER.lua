@@ -219,11 +219,32 @@ local function applyESP()
         createESPForObject(obj)
     end
 
+    -- ចាប់ Egg ដែល Spawn ថ្មីៗ
+    -- ពេល Model មកដល់មុន Parts ខាងក្នុង យើង retry បន្តិច ដើម្បីឲ្យ
+    -- PrimaryPart / BasePart មានរួចសិន។
     addedConnection = Workspace.DescendantAdded:Connect(function(obj)
-        task.wait(0.1)
-        if isEspEgg then
-            createESPForObject(obj)
-        end
+        if not isEspEgg then return end
+
+        task.spawn(function()
+            for _ = 1, 5 do
+                if not isEspEgg then return end
+
+                createESPForObject(obj)
+
+                -- បើ obj ជា Part ខាងក្នុងរបស់ Egg Model
+                -- សាកល្បង Parent Model ផង ដើម្បីចាប់ Egg បានត្រឹមត្រូវ។
+                local parentModel = obj:FindFirstAncestorOfClass("Model")
+                if parentModel then
+                    createESPForObject(parentModel)
+                end
+
+                if activeESP[obj] or (parentModel and activeESP[parentModel]) then
+                    return
+                end
+
+                task.wait(0.15)
+            end
+        end)
     end)
 
     updateConnection = RunService.RenderStepped:Connect(function()
@@ -235,9 +256,16 @@ local function applyESP()
                 if data.Highlight then data.Highlight:Destroy() end
                 if data.Billboard then data.Billboard:Destroy() end
                 activeESP[obj] = nil
-            elseif root and data.Part then
+            elseif root and data.Part and data.Part.Parent then
                 local dist = math.floor((root.Position - data.Part.Position).Magnitude)
                 data.TextLabel.Text = string.format("🥚 %s [%dm]", obj.Name, dist)
+            elseif obj and obj.Parent then
+                -- Part ចាស់អាចត្រូវបានលុបពេល Egg ផ្លាស់ប្តូរ/Spawn រួច
+                -- បង្កើត ESP ម្តងទៀតដោយស្វ័យប្រវត្តិ។
+                activeESP[obj] = nil
+                if data.Highlight then data.Highlight:Destroy() end
+                if data.Billboard then data.Billboard:Destroy() end
+                createESPForObject(obj)
             end
         end
     end)
