@@ -77,8 +77,8 @@ makeDraggable(ToggleBtn)
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 150)
-MainFrame.Position = UDim2.new(0.5, -130, 0.5, -75)
+MainFrame.Size = UDim2.new(0, 300, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = true
@@ -112,7 +112,7 @@ end)
 -- 5. ESP EGG Button
 local EspEggBtn = Instance.new("TextButton")
 EspEggBtn.Size = UDim2.new(0.85, 0, 0, 42)
-EspEggBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
+EspEggBtn.Position = UDim2.new(0.075, 0, 0.20, 0)
 EspEggBtn.Text = "ESP EGG | OFF"
 EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 EspEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -123,6 +123,290 @@ EspEggBtn.Parent = MainFrame
 local BtnCorner = Instance.new("UICorner")
 BtnCorner.CornerRadius = UDim.new(0, 8)
 BtnCorner.Parent = EspEggBtn
+
+
+-- ==================== AUTO STEAL ====================
+local autoSteal = false
+local selectedEgg = "All"
+local holdTime = 0.0
+local stealBusy = false
+
+local AutoStealBtn = Instance.new("TextButton")
+AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 38)
+AutoStealBtn.Position = UDim2.new(0.075, 0, 0.38, 0)
+AutoStealBtn.Text = "Auto Steal | OFF"
+AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+AutoStealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoStealBtn.Font = Enum.Font.SourceSansBold
+AutoStealBtn.TextSize = 15
+AutoStealBtn.Parent = MainFrame
+
+local AutoCorner = Instance.new("UICorner")
+AutoCorner.CornerRadius = UDim.new(0, 8)
+AutoCorner.Parent = AutoStealBtn
+
+local SelectLabel = Instance.new("TextLabel")
+SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
+SelectLabel.Position = UDim2.new(0.075, 0, 0.54, 0)
+SelectLabel.Text = "Select Egg"
+SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
+SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+SelectLabel.BackgroundTransparency = 1
+SelectLabel.Font = Enum.Font.SourceSansBold
+SelectLabel.TextSize = 14
+SelectLabel.Parent = MainFrame
+
+local SelectEggBtn = Instance.new("TextButton")
+SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 34)
+SelectEggBtn.Position = UDim2.new(0.075, 0, 0.64, 0)
+SelectEggBtn.Text = "All  ∨"
+SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SelectEggBtn.Font = Enum.Font.SourceSans
+SelectEggBtn.TextSize = 14
+SelectEggBtn.Parent = MainFrame
+
+local SelectCorner = Instance.new("UICorner")
+SelectCorner.CornerRadius = UDim.new(0, 8)
+SelectCorner.Parent = SelectEggBtn
+
+local EggList = Instance.new("ScrollingFrame")
+EggList.Size = UDim2.new(0.85, 0, 0, 105)
+EggList.Position = UDim2.new(0.075, 0, 0.77, 0)
+EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+EggList.BorderSizePixel = 0
+EggList.Visible = false
+EggList.ScrollBarThickness = 4
+EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
+EggList.Parent = MainFrame
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Parent = EggList
+
+local function refreshEggList()
+    for _, child in ipairs(EggList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    local names = {"All"}
+    local seen = {}
+
+    if RenderedEggs then
+        for _, egg in ipairs(RenderedEggs:GetChildren()) do
+            if isValidEgg(egg) and not seen[egg.Name] then
+                seen[egg.Name] = true
+                table.insert(names, egg.Name)
+            end
+        end
+    end
+
+    table.sort(names, function(a, b)
+        if a == "All" then return true end
+        if b == "All" then return false end
+        return a:lower() < b:lower()
+    end)
+
+    for _, name in ipairs(names) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -4, 0, 28)
+        b.Text = name
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.Font = Enum.Font.SourceSans
+        b.TextSize = 13
+        b.Parent = EggList
+
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 5)
+        c.Parent = b
+
+        b.MouseButton1Click:Connect(function()
+            selectedEgg = name
+            SelectEggBtn.Text = name .. "  ∨"
+            EggList.Visible = false
+        end)
+    end
+
+    EggList.CanvasSize = UDim2.new(0, 0, 0, #names * 30)
+end
+
+SelectEggBtn.MouseButton1Click:Connect(function()
+    if not EggList.Visible then
+        refreshEggList()
+    end
+    EggList.Visible = not EggList.Visible
+end)
+
+-- Finds the player's ranch using common Ride A Pet naming patterns.
+local function getRanchCFrame()
+    local roots = {
+        Workspace:FindFirstChild("Ranches"),
+        Workspace:FindFirstChild("Plots"),
+        Workspace:FindFirstChild("PlayerPlots"),
+        Workspace:FindFirstChild("RanchPlots")
+    }
+
+    local function findIn(root)
+        if not root then return nil end
+
+        local candidates = {
+            LocalPlayer.Name,
+            LocalPlayer.DisplayName,
+            "Your Ranch",
+            "Ranch"
+        }
+
+        for _, n in ipairs(candidates) do
+            local x = root:FindFirstChild(n)
+            if x then
+                local part = x:IsA("BasePart") and x or x:FindFirstChildWhichIsA("BasePart", true)
+                if part then return part.CFrame end
+            end
+        end
+
+        for _, x in ipairs(root:GetChildren()) do
+            local text = x.Name:lower()
+            if text:find(LocalPlayer.Name:lower(), 1, true) or text == "your ranch" then
+                local part = x:IsA("BasePart") and x or x:FindFirstChildWhichIsA("BasePart", true)
+                if part then return part.CFrame end
+            end
+        end
+        return nil
+    end
+
+    for _, root in ipairs(roots) do
+        local cf = findIn(root)
+        if cf then return cf end
+    end
+
+    -- Fallback: search descendants for an object named after the player.
+    for _, x in ipairs(Workspace:GetDescendants()) do
+        local n = x.Name:lower()
+        if n == LocalPlayer.Name:lower() or n == "your ranch" then
+            local part = x:IsA("BasePart") and x or x:FindFirstChildWhichIsA("BasePart", true)
+            if part then return part.CFrame end
+        end
+    end
+
+    return nil
+end
+
+local function getEggPart(egg)
+    if not egg then return nil end
+    local handle = egg:FindFirstChild("Handle")
+    if handle and handle:IsA("BasePart") then return handle end
+    if egg:IsA("BasePart") then return egg end
+    return egg.PrimaryPart or egg:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getStealPrompt(egg)
+    if not egg then return nil end
+
+    -- Prefer a prompt explicitly named Steal.
+    for _, x in ipairs(egg:GetDescendants()) do
+        if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
+            return x
+        end
+    end
+
+    -- Fallback to the first ProximityPrompt on the egg.
+    for _, x in ipairs(egg:GetDescendants()) do
+        if x:IsA("ProximityPrompt") then
+            return x
+        end
+    end
+
+    return nil
+end
+
+local function teleportCharacter(cf)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root and cf then
+        root.CFrame = cf + Vector3.new(0, 3, 0)
+        return true
+    end
+    return false
+end
+
+local function findTargetEgg()
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    if not RenderedEggs then return nil end
+
+    for _, egg in ipairs(RenderedEggs:GetChildren()) do
+        if isValidEgg(egg) and (selectedEgg == "All" or egg.Name == selectedEgg) then
+            if getEggPart(egg) and getStealPrompt(egg) then
+                return egg
+            end
+        end
+    end
+
+    return nil
+end
+
+local function stealOneEgg(egg)
+    if stealBusy or not autoSteal or not egg or not egg.Parent then return end
+    stealBusy = true
+
+    local eggPart = getEggPart(egg)
+    local prompt = getStealPrompt(egg)
+    local ranchCF = getRanchCFrame()
+
+    if eggPart and prompt then
+        teleportCharacter(eggPart.CFrame)
+        task.wait(0.05)
+
+        -- Hold 0.0s: trigger the ProximityPrompt immediately.
+        pcall(function()
+            prompt.HoldDuration = holdTime
+        end)
+
+        if fireproximityprompt then
+            pcall(function()
+                fireproximityprompt(prompt, 1, true)
+            end)
+        else
+            pcall(function()
+                prompt:InputHoldBegin()
+                prompt:InputHoldEnd()
+            end)
+        end
+
+        task.wait(0.15)
+
+        -- Return to the player's ranch after attempting the steal.
+        if ranchCF then
+            teleportCharacter(ranchCF)
+        end
+    end
+
+    task.wait(0.25)
+    stealBusy = false
+end
+
+AutoStealBtn.MouseButton1Click:Connect(function()
+    autoSteal = not autoSteal
+
+    if autoSteal then
+        AutoStealBtn.Text = "Auto Steal | ON"
+        AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+
+        task.spawn(function()
+            while autoSteal do
+                local egg = findTargetEgg()
+                if egg then
+                    stealOneEgg(egg)
+                else
+                    task.wait(0.25)
+                end
+            end
+        end)
+    else
+        AutoStealBtn.Text = "Auto Steal | OFF"
+        AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    end
+end)
 
 -- ==================== ADVANCED & CLEAN ESP SYSTEM ====================
 local isEspEgg = false
