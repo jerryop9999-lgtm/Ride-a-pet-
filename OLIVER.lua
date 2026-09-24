@@ -146,7 +146,7 @@ local selectedEggs = { All = true } -- multi-select rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
 local autoStealStartCFrame = nil
-local returnMode = "Start Position" -- "Start Position" or "Base"
+local returnMode = "Base" -- "Start Position" or "Base"
 
 -- Lock player movement while Auto Steal is ON so manual input cannot
 -- fight the teleport/steal sequence. Original values are restored on OFF.
@@ -918,39 +918,47 @@ local function waitForEggTaken(egg, timeout)
     return false
 end
 
+local function isNearCFrame(cf, maxDistance)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or not cf then return false end
+    return (root.Position - cf.Position).Magnitude <= (maxDistance or 8)
+end
+
 local function returnAfterSuccess()
+    local targetCFrame = nil
+
     if returnMode == "Base" then
-        local baseCFrame = getRanchCFrame()
-        if baseCFrame then
-            local ok = teleportCharacter(baseCFrame, 2.5)
-            if ok then
-                StealStatus.Text = "Status: Returned to Base ✓"
-                return true
-            end
+        targetCFrame = getRanchCFrame()
+        if not targetCFrame then
+            warn("[OLIVER] Base not detected. Auto Steal will NOT continue to the next Egg.")
+            StealStatus.Text = "Status: Base not detected — PAUSED"
+            return false
         end
-
-        -- Fallback: when the game does not expose a readable owner marker for
-        -- the player's Base, return to the exact position where Auto Steal was
-        -- enabled. In normal use this is the player's Base area.
-        if autoStealStartCFrame then
-            warn("[OLIVER] Owned Base could not be identified; using Start Position fallback")
-            teleportCharacter(autoStealStartCFrame, 0.05)
-            StealStatus.Text = "Status: Base not detected — returned to Start ✓"
-            return true
+    else
+        targetCFrame = autoStealStartCFrame
+        if not targetCFrame then
+            warn("[OLIVER] Start Position unavailable. Auto Steal will NOT continue.")
+            return false
         end
+    end
 
-        warn("[OLIVER] Base and Start Position were both unavailable")
+    local ok = teleportCharacter(targetCFrame, returnMode == "Base" and 2.5 or 0.05)
+    if not ok then
         return false
     end
 
-    if autoStealStartCFrame then
-        local ok = teleportCharacter(autoStealStartCFrame, 0.05)
-        if ok then
-            StealStatus.Text = "Status: Returned to Start ✓"
+    -- Verify that the teleport really put the character at the return point.
+    for _ = 1, 20 do
+        if isNearCFrame(targetCFrame, 10) then
+            StealStatus.Text = "Status: Returned to " .. returnMode .. " ✓"
+            return true
         end
-        return ok
+        task.wait(0.05)
     end
 
+    warn("[OLIVER] Return position was not reached; blocking next Egg.")
+    StealStatus.Text = "Status: Return not confirmed — PAUSED"
     return false
 end
 
@@ -990,14 +998,24 @@ local function stealOneEgg(egg)
         success = waitForEggTaken(egg, 6)
 
         if success then
-            StealStatus.Text = "Status: Ownership confirmed ✓"
+            StealStatus.Text = "Status: Ownership confirmed ✓ — RETURNING"
+
+            -- HARD GATE: never search for another Egg until the character has
+            -- actually reached the selected return point.
             local returned = returnAfterSuccess()
-            -- Only begin the next Egg cycle after the return has actually happened.
-            if returned then
-                task.wait(1.0)
-            else
-                task.wait(0.5)
+            if not returned then
+                StealStatus.Text = "Status: RETURN FAILED — Auto Steal PAUSED"
+                autoSteal = false
+                AutoStealBtn.Text = "Auto Steal | PAUSED"
+                AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 90, 0)
+                setMovementLocked(false)
+                stealBusy = false
+                return
             end
+
+            -- Stay at Base/Start for exactly 1 second before the next Egg.
+            StealStatus.Text = "Status: At " .. returnMode .. " ✓ — waiting 1s"
+            task.wait(1.0)
         else
             StealStatus.Text = "Status: Ownership NOT confirmed — waiting"
             -- Do not immediately fire the same prompt again. Give the game a
