@@ -148,6 +148,65 @@ local stealBusy = false
 local autoStealStartCFrame = nil
 local returnMode = "Start Position" -- "Start Position" or "Base"
 
+-- Lock player movement while Auto Steal is ON so manual input cannot
+-- fight the teleport/steal sequence. Original values are restored on OFF.
+local movementLock = {
+    controls = nil,
+    walkSpeed = nil,
+    jumpPower = nil,
+    jumpHeight = nil,
+    autoRotate = nil,
+}
+
+local function setMovementLocked(locked)
+    local player = LocalPlayer
+    local char = player.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+    if locked then
+        -- Disable Roblox's default PlayerModule controls when available.
+        if not movementLock.controls then
+            pcall(function()
+                local playerModule = player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")
+                local module = require(playerModule)
+                movementLock.controls = module:GetControls()
+            end)
+        end
+        if movementLock.controls then
+            pcall(function() movementLock.controls:Disable() end)
+        end
+
+        if humanoid then
+            movementLock.walkSpeed = humanoid.WalkSpeed
+            movementLock.jumpPower = humanoid.JumpPower
+            movementLock.jumpHeight = humanoid.JumpHeight
+            movementLock.autoRotate = humanoid.AutoRotate
+
+            humanoid.WalkSpeed = 0
+            humanoid.JumpPower = 0
+            humanoid.JumpHeight = 0
+            humanoid.AutoRotate = false
+            humanoid:Move(Vector3.zero, true)
+        end
+    else
+        if humanoid then
+            if movementLock.walkSpeed ~= nil then humanoid.WalkSpeed = movementLock.walkSpeed end
+            if movementLock.jumpPower ~= nil then humanoid.JumpPower = movementLock.jumpPower end
+            if movementLock.jumpHeight ~= nil then humanoid.JumpHeight = movementLock.jumpHeight end
+            if movementLock.autoRotate ~= nil then humanoid.AutoRotate = movementLock.autoRotate end
+        end
+
+        if movementLock.controls then
+            pcall(function() movementLock.controls:Enable() end)
+        end
+
+        movementLock.walkSpeed = nil
+        movementLock.jumpPower = nil
+        movementLock.jumpHeight = nil
+        movementLock.autoRotate = nil
+    end
+end
+
 local AutoStealBtn = Instance.new("TextButton")
 AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 38)
 AutoStealBtn.Position = UDim2.new(0.075, 0, 0, 120)
@@ -659,11 +718,15 @@ local function getStealPrompt(egg)
     return nil
 end
 
-local function teleportCharacter(cf)
+local function teleportCharacter(cf, heightOffset)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if root and cf then
-        root.CFrame = cf + Vector3.new(0, 3, 0)
+        -- Keep the character slightly above the target instead of standing inside it.
+        local y = heightOffset or 3
+        root.CFrame = cf + Vector3.new(0, y, 0)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
         return true
     end
     return false
@@ -728,7 +791,8 @@ local function stealOneEgg(egg)
     local prompt = getStealPrompt(egg)
 
     if eggPart and prompt then
-        teleportCharacter(eggPart.CFrame)
+        -- Hover just a little above the Egg, close enough for the prompt.
+        teleportCharacter(eggPart.CFrame, 2.2)
         task.wait(0.02)
 
         -- Hold 0.0s. Roblox documents HoldDuration=0 as immediate activation.
@@ -775,6 +839,9 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         AutoStealBtn.Text = "Auto Steal | ON"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
 
+        -- Prevent manual character movement while the automation is running.
+        setMovementLocked(true)
+
         task.spawn(function()
             while autoSteal do
                 local egg = findTargetEgg()
@@ -788,8 +855,15 @@ AutoStealBtn.MouseButton1Click:Connect(function()
     else
         AutoStealBtn.Text = "Auto Steal | OFF"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        setMovementLocked(false)
         autoStealStartCFrame = nil
     end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if not autoSteal then return end
+    task.wait(0.15)
+    setMovementLocked(true)
 end)
 
 -- ==================== ADVANCED & CLEAN ESP SYSTEM ====================
