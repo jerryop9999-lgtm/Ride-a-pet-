@@ -130,6 +130,7 @@ local autoSteal = false
 local selectedEgg = "All" -- rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
+local autoStealStartCFrame = nil
 
 local AutoStealBtn = Instance.new("TextButton")
 AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 38)
@@ -420,8 +421,6 @@ local function stealOneEgg(egg)
 
     local eggPart = getEggPart(egg)
     local prompt = getStealPrompt(egg)
-    local ranchCF = getRanchCFrame()
-
     if eggPart and prompt then
         teleportCharacter(eggPart.CFrame)
         task.wait(0.05)
@@ -444,9 +443,11 @@ local function stealOneEgg(egg)
 
         task.wait(0.15)
 
-        -- Return to the player's ranch after attempting the steal.
-        if ranchCF then
-            teleportCharacter(ranchCF)
+        -- After stealing, always return to the player's Base/Ranch.
+        -- This is independent of where the player was standing when Auto Steal was enabled.
+        local baseCFrame = getRanchCFrame()
+        if baseCFrame then
+            teleportCharacter(baseCFrame)
         end
     end
 
