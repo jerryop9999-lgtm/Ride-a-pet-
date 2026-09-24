@@ -78,7 +78,7 @@ makeDraggable(ToggleBtn)
 
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
+MainFrame.Name = "OLIVER"
 MainFrame.Size = UDim2.new(0, 320, 0, 450)
 MainFrame.Position = UDim2.new(0.5, -160, 0.5, -330)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
@@ -125,7 +125,7 @@ MainScroll.Parent = MainFrame
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
     if MainFrame.Visible then
-        ToggleBtn.Text = "Open Panel | ON"
+        ToggleBtn.Text = "OLIVER | ON"
     else
         ToggleBtn.Text = "Open Panel | OFF"
     end
@@ -284,12 +284,11 @@ local EggList
 
 local ReturnList = Instance.new("Frame")
 ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
-ReturnList.Position = UDim2.new(0.075, 0, 0, 306)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
-ReturnList.ZIndex = 300
-ReturnList.Active = true
+ReturnList.ZIndex = 110
 ReturnList.Parent = MainScroll
 
 local ReturnLayout = Instance.new("UIListLayout")
@@ -305,8 +304,7 @@ local function addReturnOption(textValue, order)
     b.TextColor3 = Color3.fromRGB(255, 255, 255)
     b.Font = Enum.Font.SourceSans
     b.TextSize = 13
-    b.ZIndex = 301
-    b.AutoButtonColor = true
+    b.ZIndex = 111
     b.Parent = ReturnList
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 5)
@@ -326,7 +324,7 @@ ReturnBtn.MouseButton1Click:Connect(function()
     MainScroll.CanvasPosition = Vector2.new(0, 0)
     ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
     ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-    ReturnList.Position = UDim2.new(0.075, 0, 0, 306)
+    ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
     ReturnList.Visible = not ReturnList.Visible
 end)
 
@@ -554,11 +552,11 @@ SelectEggBtn.MouseButton1Click:Connect(function()
     if EggList.Visible then
         ReturnLabel.Position = UDim2.new(0.075, 0, 0, 488)
         ReturnBtn.Position = UDim2.new(0.075, 0, 0, 513)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 549)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 513)
     else
         ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
         ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 306)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
     end
 end)
 
