@@ -57,7 +57,6 @@ local function makeDraggable(gui)
 end
 
 -- 3. Button បិទ/បើក Main Frame
-local EggToggleBtn
 local EggMainFrame
 
 local ToggleBtn = Instance.new("TextButton")
@@ -126,9 +125,6 @@ MainScroll.Parent = MainFrame
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
     if MainFrame.Visible then
-        -- Main panel and Egg panel are independent windows; only one is shown at a time.
-        if EggMainFrame then EggMainFrame.Visible = false end
-        if EggToggleBtn then EggToggleBtn.Text = "Egg Page | OFF" end
         ToggleBtn.Text = "Open Panel | ON"
     else
         ToggleBtn.Text = "Open Panel | OFF"
@@ -1253,22 +1249,6 @@ EggPageCorner.CornerRadius = UDim.new(0, 8)
 EggPageCorner.Parent = EggPageBtn
 
 -- Separate Egg window: this is NOT a child of MainFrame.
-EggToggleBtn = Instance.new("TextButton")
-EggToggleBtn.Name = "EggToggleBtn"
-EggToggleBtn.Size = UDim2.new(0, 110, 0, 38)
-EggToggleBtn.Position = UDim2.new(0, 15, 0.35, 45)
-EggToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-EggToggleBtn.Text = "Egg Page | OFF"
-EggToggleBtn.TextColor3 = Color3.fromRGB(0, 230, 255)
-EggToggleBtn.Font = Enum.Font.SourceSansBold
-EggToggleBtn.TextSize = 14
-EggToggleBtn.Parent = ScreenGui
-
-local EggToggleCorner = Instance.new("UICorner")
-EggToggleCorner.CornerRadius = UDim.new(0, 8)
-EggToggleCorner.Parent = EggToggleBtn
-makeDraggable(EggToggleBtn)
-
 EggMainFrame = Instance.new("Frame")
 EggMainFrame.Name = "EggMainFrame"
 EggMainFrame.Size = UDim2.new(0, 320, 0, 450)
@@ -1677,10 +1657,8 @@ end)
 
 
 local function openEggMainFrame()
-    MainFrame.Visible = false
-    ToggleBtn.Text = "Open Panel | OFF"
+    -- Egg UI is a separate window, but it does NOT hide/close the OLIVER MainFrame.
     EggMainFrame.Visible = true
-    EggToggleBtn.Text = "Egg Page | ON"
     EggList.Visible = false
     ReturnList.Visible = false
     EggPage.Visible = true
@@ -1689,20 +1667,13 @@ end
 
 local function closeEggMainFrame()
     EggMainFrame.Visible = false
-    EggToggleBtn.Text = "Egg Page | OFF"
 end
 
+-- Open the separate Egg UI directly from the OLIVER UI.
 EggPageBtn.MouseButton1Click:Connect(openEggMainFrame)
 
+-- X only closes the Egg UI; OLIVER MainFrame stays open.
 EggMainClose.MouseButton1Click:Connect(closeEggMainFrame)
-
-EggToggleBtn.MouseButton1Click:Connect(function()
-    if EggMainFrame.Visible then
-        closeEggMainFrame()
-    else
-        openEggMainFrame()
-    end
-end)
 
 task.spawn(function()
     while ScreenGui.Parent do
