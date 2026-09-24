@@ -763,19 +763,113 @@ local function lockToEgg(eggPart, heightOffset)
     end
 end
 
-local function findTargetEgg()
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-    if not RenderedEggs then return nil end
+-- ==================== HATCH LUCK PRIORITY ====================
+-- Read Hatch Luck from attributes / ValueObjects / Billboard text when the
+-- game exposes it. Values such as 90K, 500K, 1M, 2.5M are converted to numbers.
+local function parseLuckNumber(value)
+    if value == nil then return nil end
+    local text = tostring(value):lower():gsub(",", ""):gsub("%s+", "")
+    local n, suffix = text:match("([%d%.]+)([kmbt]?)")
+    if not n then return nil end
 
-    for _, egg in ipairs(RenderedEggs:GetChildren()) do
-        if isValidEgg(egg) and isEggTypeSelected(getEggType(egg)) then
-            if getEggPart(egg) and getStealPrompt(egg) then
-                return egg
+    n = tonumber(n)
+    if not n then return nil end
+
+    local mult = 1
+    if suffix == "k" then mult = 1e3
+    elseif suffix == "m" then mult = 1e6
+    elseif suffix == "b" then mult = 1e9
+    elseif suffix == "t" then mult = 1e12
+    end
+    return n * mult
+end
+
+local function getHatchLuck(egg)
+    if not egg then return 0 end
+
+    -- Prefer explicit attributes used by game versions.
+    local attrNames = {
+        "HatchLuck", "Hatch Luck", "Luck", "EggLuck", "LuckValue",
+        "HatchLuckValue", "Hatch_Luck"
+    }
+    for _, name in ipairs(attrNames) do
+        local ok, value = pcall(function() return egg:GetAttribute(name) end)
+        if ok and value ~= nil then
+            local n = parseLuckNumber(value)
+            if n then return n end
+        end
+    end
+
+    -- Then inspect ValueObjects.
+    for _, d in ipairs(egg:GetDescendants()) do
+        local lower = d.Name:lower()
+        if lower:find("hatch") and lower:find("luck") or lower == "luck" or lower == "eggluck" then
+            if d:IsA("StringValue") or d:IsA("IntValue") or d:IsA("NumberValue") then
+                local n = parseLuckNumber(d.Value)
+                if n then return n end
             end
         end
     end
 
-    return nil
+    -- Finally inspect displayed text such as "Hatch Luck 500K".
+    -- This is intentionally a fallback because the UI text may vary.
+    for _, d in ipairs(egg:GetDescendants()) do
+        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+            local txt = d.Text or ""
+            if txt:lower():find("luck") then
+                local n = parseLuckNumber(txt:match("([%d%.]+%s*[kmbt]?)"))
+                if n then return n end
+            end
+        end
+    end
+
+    return 0
+end
+
+local RarityPriority = {
+    Ethereal = 7,
+    Divine = 6,
+    Mythic = 5,
+    Legendary = 4,
+    Epic = 3,
+    Rare = 2,
+    Common = 1,
+}
+
+local function findTargetEgg()
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    if not RenderedEggs then return nil end
+
+    local candidates = {}
+
+    for _, egg in ipairs(RenderedEggs:GetChildren()) do
+        if isValidEgg(egg) and isEggTypeSelected(getEggType(egg)) then
+            if getEggPart(egg) and getStealPrompt(egg) then
+                local rarity = getEggType(egg)
+                table.insert(candidates, {
+                    egg = egg,
+                    luck = getHatchLuck(egg),
+                    rarityPriority = RarityPriority[rarity] or 0,
+                })
+            end
+        end
+    end
+
+    -- IMPORTANT:
+    -- Multiple selected Egg Types are NOT taken in selection order.
+    -- Highest Hatch Luck is always first. If Luck is unavailable/equal,
+    -- higher rarity is used as the deterministic tie-breaker.
+    table.sort(candidates, function(a, b)
+        if a.luck ~= b.luck then
+            return a.luck > b.luck
+        end
+        if a.rarityPriority ~= b.rarityPriority then
+            return a.rarityPriority > b.rarityPriority
+        end
+        return a.egg.Name < b.egg.Name
+    end)
+
+    return candidates[1] and candidates[1].egg or nil
 end
 
 local function waitForEggTaken(egg)
