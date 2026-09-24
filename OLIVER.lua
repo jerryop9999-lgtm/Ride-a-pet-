@@ -221,9 +221,20 @@ local AutoCorner = Instance.new("UICorner")
 AutoCorner.CornerRadius = UDim.new(0, 8)
 AutoCorner.Parent = AutoStealBtn
 
+local StealStatus = Instance.new("TextLabel")
+StealStatus.Size = UDim2.new(0.85, 0, 0, 22)
+StealStatus.Position = UDim2.new(0.075, 0, 0, 135)
+StealStatus.Text = "Status: Ready"
+StealStatus.TextXAlignment = Enum.TextXAlignment.Left
+StealStatus.TextColor3 = Color3.fromRGB(170, 170, 180)
+StealStatus.BackgroundTransparency = 1
+StealStatus.Font = Enum.Font.SourceSans
+StealStatus.TextSize = 12
+StealStatus.Parent = MainScroll
+
 local SelectLabel = Instance.new("TextLabel")
 SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
-SelectLabel.Position = UDim2.new(0.075, 0, 0, 168)
+SelectLabel.Position = UDim2.new(0.075, 0, 0, 190)
 SelectLabel.Text = "Select Egg Type"
 SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
 SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -234,7 +245,7 @@ SelectLabel.Parent = MainScroll
 
 local SelectEggBtn = Instance.new("TextButton")
 SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 34)
-SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 194)
+SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 216)
 SelectEggBtn.Text = "All  ∨"
 SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -248,7 +259,7 @@ SelectCorner.Parent = SelectEggBtn
 
 local ReturnLabel = Instance.new("TextLabel")
 ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
-ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
+ReturnLabel.Position = UDim2.new(0.075, 0, 0, 267)
 ReturnLabel.Text = "Return To"
 ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
 ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -259,7 +270,7 @@ ReturnLabel.Parent = MainScroll
 
 local ReturnBtn = Instance.new("TextButton")
 ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
-ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
+ReturnBtn.Position = UDim2.new(0.075, 0, 0, 292)
 ReturnBtn.Text = "Start Position  ∨"
 ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -276,7 +287,7 @@ local EggList
 
 local ReturnList = Instance.new("Frame")
 ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
-ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 292)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
@@ -313,9 +324,9 @@ addReturnOption("Base", 2)
 ReturnBtn.MouseButton1Click:Connect(function()
     EggList.Visible = false
     MainScroll.CanvasPosition = Vector2.new(0, 0)
-    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
-    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-    ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 267)
+    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 292)
+    ReturnList.Position = UDim2.new(0.075, 0, 0, 292)
     ReturnList.Visible = not ReturnList.Visible
 end)
 
@@ -541,13 +552,13 @@ SelectEggBtn.MouseButton1Click:Connect(function()
 
     -- Move Return To below the open Egg Type list so the two menus never overlap.
     if EggList.Visible then
-        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 488)
-        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 513)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 513)
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 510)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 535)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 535)
     else
-        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
-        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 267)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 292)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 292)
     end
 end)
 
@@ -722,13 +733,138 @@ local function teleportCharacter(cf, heightOffset)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if root and cf then
-        -- Keep the character slightly above the target instead of standing inside it.
-        local y = heightOffset or 3
+        -- Move directly to the Egg's center, with only a tiny lift so the
+        -- character does not get stuck inside the Egg.
+        local y = heightOffset or 0.05
         root.CFrame = cf + Vector3.new(0, y, 0)
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
         return true
     end
+    return false
+end
+
+local function valueMatchesLocalPlayer(value)
+    if value == LocalPlayer then return true end
+    if typeof(value) == "string" then
+        local v = value:lower()
+        return v == LocalPlayer.Name:lower() or v == LocalPlayer.DisplayName:lower()
+    end
+    if typeof(value) == "number" then
+        return value == LocalPlayer.UserId
+    end
+    return false
+end
+
+-- Ownership is intentionally conservative. The public game documentation does
+-- not expose a documented Owner/ClaimedBy field for Eggs, so disappearance from
+-- RenderedEggs is NEVER treated as a successful steal by itself.
+local OWNER_KEYS = {
+    "owner", "ownername", "owneruserid", "userid", "player",
+    "playername", "playerid", "claimedby", "claimedbyname",
+    "claimedbyuserid", "ownedby", "ownedbyname", "ownedbyuserid"
+}
+
+local function normalizedKey(name)
+    return tostring(name):lower():gsub("[%s_%-]", "")
+end
+
+local function hasLocalOwnershipMarker(root)
+    if not root then return false end
+
+    local function keyMatches(name)
+        local n = normalizedKey(name)
+        for _, key in ipairs(OWNER_KEYS) do
+            if n == key then return true end
+        end
+        return false
+    end
+
+    -- Attributes on the root.
+    for _, attrName in ipairs({
+        "Owner", "OwnerName", "OwnerUserId", "UserId", "Player",
+        "PlayerName", "PlayerId", "ClaimedBy", "ClaimedByName",
+        "ClaimedByUserId", "OwnedBy", "OwnedByName", "OwnedByUserId"
+    }) do
+        local ok, value = pcall(function() return root:GetAttribute(attrName) end)
+        if ok and value ~= nil and valueMatchesLocalPlayer(value) then
+            return true
+        end
+    end
+
+    -- ValueObjects / attributes on descendants.
+    for _, d in ipairs(root:GetDescendants()) do
+        if keyMatches(d.Name) then
+            if d:IsA("ObjectValue") and d.Value == LocalPlayer then
+                return true
+            elseif d:IsA("StringValue") and valueMatchesLocalPlayer(d.Value) then
+                return true
+            elseif (d:IsA("IntValue") or d:IsA("NumberValue")) and valueMatchesLocalPlayer(d.Value) then
+                return true
+            end
+        end
+
+        for _, attrName in ipairs({
+            "Owner", "OwnerName", "OwnerUserId", "UserId", "Player",
+            "PlayerName", "PlayerId", "ClaimedBy", "ClaimedByName",
+            "ClaimedByUserId", "OwnedBy", "OwnedByName", "OwnedByUserId"
+        }) do
+            local ok, value = pcall(function() return d:GetAttribute(attrName) end)
+            if ok and value ~= nil and valueMatchesLocalPlayer(value) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function containsNamedOwnedObject(root, targetName)
+    if not root or not targetName then return false end
+    if root.Name == targetName and hasLocalOwnershipMarker(root) then
+        return true
+    end
+    for _, d in ipairs(root:GetDescendants()) do
+        if d.Name == targetName and hasLocalOwnershipMarker(d) then
+            return true
+        end
+    end
+    return false
+end
+
+local function findOwnedEggEvidence(egg)
+    if not egg then return false end
+    local targetName = egg.Name
+
+    -- A) Original egg gets an explicit ownership marker.
+    if hasLocalOwnershipMarker(egg) then
+        return true
+    end
+
+    -- B) Game reparents/moves an owned copy into a player-owned container.
+    local roots = {
+        LocalPlayer.Character,
+        LocalPlayer:FindFirstChild("Backpack"),
+        LocalPlayer:FindFirstChild("Inventory"),
+        LocalPlayer:FindFirstChild("Pets"),
+        LocalPlayer:FindFirstChild("Eggs")
+    }
+    for _, root in ipairs(roots) do
+        if containsNamedOwnedObject(root, targetName) then
+            return true
+        end
+    end
+
+    -- C) If the game puts the claimed Egg into the player's own ranch/base,
+    -- treat a same-named object with an ownership marker as confirmation.
+    local base = findPlayerBase()
+    if base then
+        local container = base:FindFirstAncestorOfClass("Model") or base.Parent
+        if container and containsNamedOwnedObject(container, targetName) then
+            return true
+        end
+    end
+
     return false
 end
 
@@ -748,18 +884,33 @@ local function findTargetEgg()
 end
 
 local function waitForEggTaken(egg, timeout)
-    local deadline = os.clock() + (timeout or 1.5)
+    local deadline = os.clock() + (timeout or 4)
+    local sawRemoved = false
+
     while os.clock() < deadline do
         if not autoSteal then
             return false
         end
 
-        -- Successful pickup in RenderedEggs normally removes/reparents the egg.
-        if not egg or not egg.Parent or not RenderedEggs or not egg:IsDescendantOf(RenderedEggs) then
+        -- SUCCESS: the game has explicitly marked this Egg as belonging to us
+        -- (or moved an owned copy into a player-owned container).
+        if findOwnedEggEvidence(egg) then
             return true
         end
 
-        task.wait(0.02)
+        -- If it disappears/reparents before ownership is visible, remember that
+        -- state but DO NOT return yet. Another player may have taken it.
+        if not egg or not egg.Parent or not RenderedEggs or not egg:IsDescendantOf(RenderedEggs) then
+            sawRemoved = true
+        end
+
+        task.wait(0.03)
+    end
+
+    if sawRemoved then
+        warn("[OLIVER] Egg disappeared, but ownership was not confirmed; will NOT return or count it as stolen")
+    else
+        warn("[OLIVER] Egg ownership was not confirmed; will NOT return or count it as stolen")
     end
 
     return false
@@ -791,8 +942,10 @@ local function stealOneEgg(egg)
     local prompt = getStealPrompt(egg)
 
     if eggPart and prompt then
-        -- Hover just a little above the Egg, close enough for the prompt.
-        teleportCharacter(eggPart.CFrame, 2.2)
+        -- Fly/teleport directly to the middle of the Egg. The tiny 0.8-stud
+        -- lift keeps the root from being buried inside the Egg while remaining
+        -- close enough for the Steal prompt.
+        teleportCharacter(eggPart.CFrame, 0.05)
         task.wait(0.02)
 
         -- Hold 0.0s. Roblox documents HoldDuration=0 as immediate activation.
@@ -811,16 +964,20 @@ local function stealOneEgg(egg)
             end)
         end
 
-        -- IMPORTANT: do not return immediately. Wait until the egg is actually
-        -- removed/reparented from RenderedEggs, which is the success signal we can
-        -- observe locally.
-        success = waitForEggTaken(egg, 3)
+        -- IMPORTANT: do not return just because the Egg disappeared. Wait until
+        -- the game explicitly shows that the Egg belongs to LocalPlayer.
+        success = waitForEggTaken(egg, 6)
 
         if success then
+            StealStatus.Text = "Status: Ownership confirmed ✓"
             returnAfterSuccess()
-            task.wait(0.05)
+            -- Stay at Base/Start Position for 1 second before searching for the next Egg.
+            task.wait(1.0)
         else
-            warn("[OLIVER] Steal was triggered but Egg was not confirmed taken; not returning")
+            StealStatus.Text = "Status: Ownership NOT confirmed — waiting"
+            -- Do not immediately fire the same prompt again. Give the game a
+            -- moment to finish its server-side state change.
+            task.wait(0.20)
         end
     end
 
@@ -837,6 +994,7 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         autoStealStartCFrame = root and root.CFrame or nil
 
         AutoStealBtn.Text = "Auto Steal | ON"
+        StealStatus.Text = "Status: Waiting for Egg..."
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
 
         -- Prevent manual character movement while the automation is running.
@@ -846,7 +1004,9 @@ AutoStealBtn.MouseButton1Click:Connect(function()
             while autoSteal do
                 local egg = findTargetEgg()
                 if egg then
+                    StealStatus.Text = "Status: Going to " .. egg.Name
                     stealOneEgg(egg)
+                    if autoSteal then StealStatus.Text = "Status: Waiting for next Egg..." end
                 else
                     task.wait(0.05)
                 end
@@ -854,6 +1014,7 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         end)
     else
         AutoStealBtn.Text = "Auto Steal | OFF"
+        StealStatus.Text = "Status: Ready"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         setMovementLocked(false)
         autoStealStartCFrame = nil
