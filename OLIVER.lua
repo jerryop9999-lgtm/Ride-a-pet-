@@ -60,7 +60,7 @@ end
 local EggMainFrame
 
 local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Name = "ToggleMenuBtn"
+ToggleBtn.Name = "OLIVER"
 ToggleBtn.Size = UDim2.new(0, 90, 0, 38)
 ToggleBtn.Position = UDim2.new(0, 15, 0.35, 0)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
@@ -78,7 +78,7 @@ makeDraggable(ToggleBtn)
 
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Name = "OLIVER"
+MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 320, 0, 450)
 MainFrame.Position = UDim2.new(0.5, -160, 0.5, -330)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
@@ -125,7 +125,7 @@ MainScroll.Parent = MainFrame
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
     if MainFrame.Visible then
-        ToggleBtn.Text = "OLIVER | ON"
+        ToggleBtn.Text = "Open Panel | ON"
     else
         ToggleBtn.Text = "Open Panel | OFF"
     end
