@@ -62,7 +62,7 @@ ToggleBtn.Name = "ToggleMenuBtn"
 ToggleBtn.Size = UDim2.new(0, 90, 0, 38)
 ToggleBtn.Position = UDim2.new(0, 15, 0.35, 0)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-ToggleBtn.Text = "OLIVER"
+ToggleBtn.Text = "Open Panel | OFF"
 ToggleBtn.TextColor3 = Color3.fromRGB(0, 230, 255)
 ToggleBtn.Font = Enum.Font.SourceSansBold
 ToggleBtn.TextSize = 15
@@ -82,7 +82,7 @@ MainFrame.Position = UDim2.new(0.5, -150, 0.5, -225)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
-MainFrame.Visible = true
+MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -122,6 +122,13 @@ MainScroll.Parent = MainFrame
 
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
+    if MainFrame.Visible then
+        ToggleBtn.Text = "Open Panel | ON"
+        EggPage.Visible = false
+        EggPageToggle.Text = "Egg Page | OFF"
+    else
+        ToggleBtn.Text = "Open Panel | OFF"
+    end
 end)
 
 -- 5. ESP EGG Button
@@ -1244,12 +1251,30 @@ EggPageCorner.Parent = EggPageBtn
 local EggPage = Instance.new("Frame")
 EggPage.Name = "EggPage"
 EggPage.Size = UDim2.new(0, 300, 0, 405)
-EggPage.Position = UDim2.new(0, 10, 0, 45)
+EggPage.Position = UDim2.new(0.5, -150, 0.5, -202)
 EggPage.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 EggPage.BorderSizePixel = 0
 EggPage.Visible = false
 EggPage.ZIndex = 500
-EggPage.Parent = MainFrame
+-- Egg Page is a separate panel from MainFrame.
+EggPage.Parent = ScreenGui
+
+local EggPageToggle = Instance.new("TextButton")
+EggPageToggle.Name = "EggPageToggle"
+EggPageToggle.Size = UDim2.new(0, 90, 0, 38)
+EggPageToggle.Position = UDim2.new(0, 15, 0.35, 45)
+EggPageToggle.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+EggPageToggle.Text = "Egg Page | OFF"
+EggPageToggle.TextColor3 = Color3.fromRGB(0, 230, 255)
+EggPageToggle.Font = Enum.Font.SourceSansBold
+EggPageToggle.TextSize = 13
+EggPageToggle.ZIndex = 600
+EggPageToggle.Parent = ScreenGui
+
+local EggPageToggleCorner = Instance.new("UICorner")
+EggPageToggleCorner.CornerRadius = UDim.new(0, 8)
+EggPageToggleCorner.Parent = EggPageToggle
+makeDraggable(EggPageToggle)
 
 local EggPageCorner2 = Instance.new("UICorner")
 EggPageCorner2.CornerRadius = UDim.new(0, 10)
@@ -1599,16 +1624,30 @@ Workspace.ChildAdded:Connect(function(child)
 end)
 
 
-EggPageBtn.MouseButton1Click:Connect(function()
-    EggList.Visible = false
-    ReturnList.Visible = false
-    EggPage.Visible = true
-    refreshEggPage()
+local function setEggPageVisible(visible)
+    EggPage.Visible = visible
+    EggPageToggle.Text = visible and "Egg Page | ON" or "Egg Page | OFF"
 
-    queueEggPageRefresh()end)
+    if visible then
+        MainFrame.Visible = false
+        ToggleBtn.Text = "Open Panel | OFF"
+        EggList.Visible = false
+        ReturnList.Visible = false
+        refreshEggPage()
+        queueEggPageRefresh()
+    end
+end
+
+EggPageToggle.MouseButton1Click:Connect(function()
+    setEggPageVisible(not EggPage.Visible)
+end)
+
+EggPageBtn.MouseButton1Click:Connect(function()
+    setEggPageVisible(true)
+end)
 
 EggPageClose.MouseButton1Click:Connect(function()
-    EggPage.Visible = false
+    setEggPageVisible(false)
 end)
 
 task.spawn(function()
