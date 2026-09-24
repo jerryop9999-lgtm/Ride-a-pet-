@@ -127,7 +127,7 @@ BtnCorner.Parent = EspEggBtn
 
 -- ==================== AUTO STEAL ====================
 local autoSteal = false
-local selectedEgg = "All"
+local selectedEgg = "All" -- rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
 
@@ -148,7 +148,7 @@ AutoCorner.Parent = AutoStealBtn
 local SelectLabel = Instance.new("TextLabel")
 SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
 SelectLabel.Position = UDim2.new(0.075, 0, 0.54, 0)
-SelectLabel.Text = "Select Egg"
+SelectLabel.Text = "Select Egg Type"
 SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
 SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
 SelectLabel.BackgroundTransparency = 1
@@ -184,35 +184,102 @@ local ListLayout = Instance.new("UIListLayout")
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = EggList
 
-local isValidEgg
+-- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
+function isValidEgg(obj)
+    -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
+    if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
+        return false
+    end
+
+    -- Only track the actual egg Model, not its Handle/BillboardGui children.
+    if not obj:IsA("Model") then
+        return false
+    end
+
+    -- ១. រំលងប្រសិនបើវាជាផ្នែកមួយនៃ Player Character ឬ Pet ដែលកំពុងជិះ
+    local modelAncestor = obj:FindFirstAncestorOfClass("Model")
+    if modelAncestor and Players:GetPlayerFromCharacter(modelAncestor) then
+        return false
+    end
+
+    local nameLower = obj.Name:lower()
+
+    -- ២. រំលងពាក្យបច្ចេកទេសដែលមិនមែនជា Egg (ដូចជា EggSpawn, EggBase, Spawn -ល-)
+    if nameLower:find("spawn") or nameLower:find("base") or nameLower:find("holder") or nameLower:find("zone") then
+        return false
+    end
+
+    -- ៣. ត្រូវតែមានពាក្យ "egg" ក្នុងឈ្មោះ
+    if not nameLower:find("egg") then
+        return false
+    end
+
+    -- ៤. ការពារឈ្មោះជាន់គ្នា៖ បើវាជា Part ធម្មតា ហើយ Parent Model វាមានឈ្មោះ Egg ស្រាប់ -> យកតែ Parent Model
+    if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and obj.Parent.Name:lower():find("egg") then
+        return false
+    end
+
+    return true
+end
+
+
+local EggRarity = {
+    ["White Egg"] = "Common",
+    ["Brown Egg"] = "Common",
+    ["Cracked Egg"] = "Rare",
+    ["Easter Egg"] = "Rare",
+    ["Stone Egg"] = "Rare",
+    ["Leaf Egg"] = "Rare",
+    ["Mushroom Egg"] = "Epic",
+    ["Flower Egg"] = "Epic",
+    ["Slime Egg"] = "Epic",
+    ["Ice Egg"] = "Epic",
+    ["Glass Egg"] = "Legendary",
+    ["Golden Egg"] = "Legendary",
+    ["Crystal Egg"] = "Mythic",
+    ["Skull Egg"] = "Mythic",
+    ["Dominus Egg"] = "Mythic",
+    ["Flaming Egg"] = "Mythic",
+    ["Sinister Egg"] = "Mythic",
+    ["Soul Egg"] = "Mythic",
+    ["Aurora Egg"] = "Divine",
+    ["Galaxy Egg"] = "Divine",
+    ["Black Hole Egg"] = "Ethereal",
+    ["Cherub Egg"] = "Ethereal"
+}
+
+local EggTypes = {"All", "Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
+
+local function getEggType(egg)
+    if not egg then return nil end
+    if EggRarity[egg.Name] then
+        return EggRarity[egg.Name]
+    end
+
+    -- Fallback: some versions display rarity/type in an attribute or StringValue.
+    local attr = egg:GetAttribute("Rarity") or egg:GetAttribute("Type") or egg:GetAttribute("EggType")
+    if typeof(attr) == "string" then
+        return attr
+    end
+
+    for _, d in ipairs(egg:GetDescendants()) do
+        if d:IsA("StringValue") and (d.Name == "Rarity" or d.Name == "Type" or d.Name == "EggType") then
+            return d.Value
+        end
+    end
+    return nil
+end
 
 local function refreshEggList()
     for _, child in ipairs(EggList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
 
-    local names = {"All"}
-    local seen = {}
-
-    if RenderedEggs then
-        for _, egg in ipairs(RenderedEggs:GetChildren()) do
-            if isValidEgg(egg) and not seen[egg.Name] then
-                seen[egg.Name] = true
-                table.insert(names, egg.Name)
-            end
-        end
-    end
-
-    table.sort(names, function(a, b)
-        if a == "All" then return true end
-        if b == "All" then return false end
-        return a:lower() < b:lower()
-    end)
-
-    for _, name in ipairs(names) do
+    for order, eggType in ipairs(EggTypes) do
         local b = Instance.new("TextButton")
         b.Size = UDim2.new(1, -4, 0, 28)
-        b.Text = name
+        b.LayoutOrder = order
+        b.Text = eggType
         b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         b.TextColor3 = Color3.fromRGB(255, 255, 255)
         b.Font = Enum.Font.SourceSans
@@ -224,13 +291,13 @@ local function refreshEggList()
         c.Parent = b
 
         b.MouseButton1Click:Connect(function()
-            selectedEgg = name
-            SelectEggBtn.Text = name .. "  ∨"
+            selectedEgg = eggType
+            SelectEggBtn.Text = eggType .. "  ∨"
             EggList.Visible = false
         end)
     end
 
-    EggList.CanvasSize = UDim2.new(0, 0, 0, #names * 30)
+    EggList.CanvasSize = UDim2.new(0, 0, 0, #EggTypes * 30)
 end
 
 SelectEggBtn.MouseButton1Click:Connect(function()
@@ -337,7 +404,7 @@ local function findTargetEgg()
     if not RenderedEggs then return nil end
 
     for _, egg in ipairs(RenderedEggs:GetChildren()) do
-        if isValidEgg(egg) and (selectedEgg == "All" or egg.Name == selectedEgg) then
+        if isValidEgg(egg) and (selectedEgg == "All" or getEggType(egg) == selectedEgg) then
             if getEggPart(egg) and getStealPrompt(egg) then
                 return egg
             end
@@ -427,43 +494,6 @@ local function removeESP()
     if addedConnection then addedConnection:Disconnect() addedConnection = nil end
 end
 
--- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
-function isValidEgg(obj)
-    -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
-    if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
-        return false
-    end
-
-    -- Only track the actual egg Model, not its Handle/BillboardGui children.
-    if not obj:IsA("Model") then
-        return false
-    end
-
-    -- ១. រំលងប្រសិនបើវាជាផ្នែកមួយនៃ Player Character ឬ Pet ដែលកំពុងជិះ
-    local modelAncestor = obj:FindFirstAncestorOfClass("Model")
-    if modelAncestor and Players:GetPlayerFromCharacter(modelAncestor) then
-        return false
-    end
-
-    local nameLower = obj.Name:lower()
-
-    -- ២. រំលងពាក្យបច្ចេកទេសដែលមិនមែនជា Egg (ដូចជា EggSpawn, EggBase, Spawn -ល-)
-    if nameLower:find("spawn") or nameLower:find("base") or nameLower:find("holder") or nameLower:find("zone") then
-        return false
-    end
-
-    -- ៣. ត្រូវតែមានពាក្យ "egg" ក្នុងឈ្មោះ
-    if not nameLower:find("egg") then
-        return false
-    end
-
-    -- ៤. ការពារឈ្មោះជាន់គ្នា៖ បើវាជា Part ធម្មតា ហើយ Parent Model វាមានឈ្មោះ Egg ស្រាប់ -> យកតែ Parent Model
-    if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and obj.Parent.Name:lower():find("egg") then
-        return false
-    end
-
-    return true
-end
 
 local function createESPForObject(obj)
     if not isEspEgg then return end
