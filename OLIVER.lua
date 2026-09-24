@@ -184,6 +184,8 @@ local ListLayout = Instance.new("UIListLayout")
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = EggList
 
+local isValidEgg
+
 local function refreshEggList()
     for _, child in ipairs(EggList:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -426,7 +428,7 @@ local function removeESP()
 end
 
 -- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
-local function isValidEgg(obj)
+function isValidEgg(obj)
     -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
     if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
         return false
