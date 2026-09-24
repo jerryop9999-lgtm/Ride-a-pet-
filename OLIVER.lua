@@ -1259,7 +1259,7 @@ local EggPageTitle = Instance.new("TextLabel")
 EggPageTitle.Size = UDim2.new(1, -50, 0, 38)
 EggPageTitle.Position = UDim2.new(0, 12, 0, 0)
 EggPageTitle.BackgroundTransparency = 1
-EggPageTitle.Text = "EGG PAGE | Best → Worst"
+EggPageTitle.Text = "EGG PAGE | 🟢 LIVE | Priority"
 EggPageTitle.TextColor3 = Color3.fromRGB(0, 230, 255)
 EggPageTitle.Font = Enum.Font.SourceSansBold
 EggPageTitle.TextSize = 16
@@ -1389,60 +1389,122 @@ local function refreshEggPage()
 
     clearEggPageRows()
 
-    local rows = {}
-    for _, name in ipairs(RequestedEggNames) do
-        local liveEgg = findLiveEggByName(name)
-        local luck = KnownEggLuck[name] or 0
+    -- LIVE Egg types only, in the fixed priority order.
+    -- If the same Egg type exists multiple times, combine them into one row
+    -- and show the amount, e.g. "🟢 Slime Egg x3 | 00:25".
+    local priority = {}
+    for index, name in ipairs(RequestedEggNames) do
+        priority[name:lower()] = index
+    end
 
-        if liveEgg then
-            local liveLuck = getEggLuck(liveEgg)
-            if liveLuck and liveLuck > 0 then
-                luck = liveLuck
+    local grouped = {}
+    local seen = {}
+
+    local function collect(container)
+        if not container then return end
+
+        for _, egg in ipairs(container:GetChildren()) do
+            if egg:IsA("Model") and not seen[egg] then
+                local key = egg.Name:lower()
+                local order = priority[key]
+
+                if order then
+                    seen[egg] = true
+
+                    local group = grouped[key]
+                    if not group then
+                        group = {
+                            name = egg.Name,
+                            order = order,
+                            count = 0,
+                            countdowns = {},
+                            target = false,
+                        }
+                        grouped[key] = group
+                    end
+
+                    group.count += 1
+
+                    local countdown = parseEggCountdown(egg)
+                    if countdown ~= nil then
+                        table.insert(group.countdowns, countdown)
+                    end
+
+                    if cachedTargetEgg == egg then
+                        group.target = true
+                    end
+                end
+            end
+        end
+    end
+
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    collect(RenderedEggs)
+
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        for _, containerName in ipairs({
+            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
+            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
+        }) do
+            collect(map:FindFirstChild(containerName, true))
+        end
+    end
+
+    local live = {}
+    for _, group in pairs(grouped) do
+        -- Display the shortest countdown for the type. This makes the UI show
+        -- the Egg type that will expire/reset first.
+        local nextCountdown = nil
+        for _, value in ipairs(group.countdowns) do
+            if nextCountdown == nil or value < nextCountdown then
+                nextCountdown = value
             end
         end
 
-        local countdown = liveEgg and parseEggCountdown(liveEgg) or nil
-
-        table.insert(rows, {
-            name = name,
-            luck = luck,
-            countdown = countdown,
-            live = liveEgg ~= nil,
-            target = (cachedTargetEgg == liveEgg and liveEgg ~= nil),
-        })
+        group.countdown = nextCountdown
+        table.insert(live, group)
     end
 
-    table.sort(rows, function(a, b)
-        if a.luck ~= b.luck then
-            return a.luck > b.luck
+    table.sort(live, function(a, b)
+        if a.order ~= b.order then
+            return a.order < b.order
         end
         return a.name < b.name
     end)
 
-    for index, row in ipairs(rows) do
+    for index, row in ipairs(live) do
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -4, 0, 27)
+        label.Size = UDim2.new(1, -4, 0, 29)
         label.LayoutOrder = index
         label.BackgroundColor3 = row.target
             and Color3.fromRGB(0, 95, 70)
-            or (row.live and Color3.fromRGB(35, 35, 48) or Color3.fromRGB(27, 27, 37))
+            or Color3.fromRGB(35, 35, 48)
         label.BorderSizePixel = 0
-        label.TextColor3 = row.live and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 140)
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
         label.Font = row.target and Enum.Font.SourceSansBold or Enum.Font.SourceSans
         label.TextSize = 13
         label.TextXAlignment = Enum.TextXAlignment.Left
         label.ZIndex = 502
 
-        local status = row.live and formatEggCountdown(row.countdown) or "NOT SPAWNED"
+        local countdown = formatEggCountdown(row.countdown)
         local targetMark = row.target and "  ★" or ""
-        label.Text = string.format(
-            "#%02d  %s%s  | Luck %s | %s",
+
+        local baseText = string.format(
+            "#%02d  🟢 %s x%d%s",
             index,
             row.name,
-            targetMark,
-            tostring(row.luck),
-            status
+            row.count,
+            targetMark
         )
+
+        label.Text = baseText .. "  |  " .. countdown
+
+        if row.countdown ~= nil then
+            label:SetAttribute("EggPageCountdown", true)
+            label:SetAttribute("EggPageBaseText", baseText)
+            label:SetAttribute("EggPageExpireAt", os.clock() + row.countdown)
+        end
 
         local pad = Instance.new("UIPadding")
         pad.PaddingLeft = UDim.new(0, 6)
@@ -1451,15 +1513,99 @@ local function refreshEggPage()
         label.Parent = EggPageList
     end
 
-    EggPageList.CanvasSize = UDim2.new(0, 0, 0, #rows * 30)
+    if #live == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, -4, 0, 32)
+        empty.LayoutOrder = 1
+        empty.BackgroundTransparency = 1
+        empty.Text = "🟡 No Egg LIVE"
+        empty.TextColor3 = Color3.fromRGB(200, 200, 210)
+        empty.Font = Enum.Font.SourceSans
+        empty.TextSize = 14
+        empty.ZIndex = 502
+        empty.Parent = EggPageList
+    end
+
+    EggPageList.CanvasSize = UDim2.new(0, 0, 0, math.max(#live, 1) * 32)
 end
+
+-- EGG PAGE: event-driven only.
+-- No Map scanning loop. The page updates only when an Egg is added/removed.
+local eggPageConnections = {}
+
+local function eggPageSignalUpdate()
+    if EggPage.Visible then
+        task.defer(function()
+            if EggPage.Visible then
+                refreshEggPage()
+            end
+        end)
+    end
+end
+
+local function watchEggPageContainer(container)
+    if not container then return end
+
+    if eggPageConnections[container] then return end
+
+    local connections = {}
+    connections.added = container.ChildAdded:Connect(function(child)
+        -- New Egg spawned.
+        task.defer(function()
+            if child and child.Parent then
+                eggPageSignalUpdate()
+            end
+        end)
+    end)
+
+    connections.removed = container.ChildRemoved:Connect(function(child)
+        -- Egg disappeared/despawned.
+        eggPageSignalUpdate()
+    end)
+
+    eggPageConnections[container] = connections
+end
+
+local function setupEggPageSpawnWatchers()
+    -- Only attach listeners to known Egg containers.
+    -- We do not enumerate/scan their descendants.
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    watchEggPageContainer(RenderedEggs)
+
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        for _, containerName in ipairs({
+            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
+            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
+        }) do
+            watchEggPageContainer(map:FindFirstChild(containerName, true))
+        end
+    end
+end
+
+setupEggPageSpawnWatchers()
+
+-- If a container itself is created later, attach to it once.
+Workspace.ChildAdded:Connect(function(child)
+    if child.Name == "RenderedEggs" then
+        watchEggPageContainer(child)
+        eggPageSignalUpdate()
+    elseif child.Name == "Map" then
+        task.defer(function()
+            setupEggPageSpawnWatchers()
+            eggPageSignalUpdate()
+        end)
+    end
+end)
+
 
 EggPageBtn.MouseButton1Click:Connect(function()
     EggList.Visible = false
     ReturnList.Visible = false
     EggPage.Visible = true
     refreshEggPage()
-end)
+
+    queueEggPageRefresh()end)
 
 EggPageClose.MouseButton1Click:Connect(function()
     EggPage.Visible = false
