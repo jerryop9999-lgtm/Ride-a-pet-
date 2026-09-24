@@ -77,7 +77,7 @@ makeDraggable(ToggleBtn)
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 320, 0, 500)
+MainFrame.Size = UDim2.new(0, 320, 0, 580)
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
@@ -175,7 +175,7 @@ SelectCorner.Parent = SelectEggBtn
 
 local ReturnLabel = Instance.new("TextLabel")
 ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
-ReturnLabel.Position = UDim2.new(0.075, 0, 0, 380)
+ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
 ReturnLabel.Text = "Return To"
 ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
 ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -186,7 +186,7 @@ ReturnLabel.Parent = MainFrame
 
 local ReturnBtn = Instance.new("TextButton")
 ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
-ReturnBtn.Position = UDim2.new(0.075, 0, 0, 405)
+ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
 ReturnBtn.Text = "Start Position  ∨"
 ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -200,7 +200,7 @@ ReturnCorner.Parent = ReturnBtn
 
 local ReturnList = Instance.new("Frame")
 ReturnList.Size = UDim2.new(0.85, 0, 0, 68)
-ReturnList.Position = UDim2.new(0.075, 0, 0, 405)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
@@ -235,11 +235,15 @@ addReturnOption("Start Position", 1)
 addReturnOption("Base", 2)
 
 ReturnBtn.MouseButton1Click:Connect(function()
+    EggList.Visible = false
+    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
+    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
+    ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
     ReturnList.Visible = not ReturnList.Visible
 end)
 
 local EggList = Instance.new("ScrollingFrame")
-EggList.Size = UDim2.new(0.85, 0, 0, 230)
+EggList.Size = UDim2.new(0.85, 0, 0, 250)
 EggList.Position = UDim2.new(0.075, 0, 0, 230)
 EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 EggList.BorderSizePixel = 0
@@ -439,7 +443,7 @@ local function refreshEggList()
         end)
     end
 
-    EggList.CanvasSize = UDim2.new(0, 0, 0, #EggTypes * 30)
+    EggList.CanvasSize = UDim2.new(0, 0, 0, #EggTypes * 30 + 4)
 end
 
 updateEggTypeButtonText()
@@ -448,8 +452,20 @@ SelectEggBtn.MouseButton1Click:Connect(function()
     if not EggList.Visible then
         refreshEggList()
     end
+
     EggList.Visible = not EggList.Visible
-    if EggList.Visible then ReturnList.Visible = false end
+    ReturnList.Visible = false
+
+    -- Move Return To below the open Egg Type list so the two menus never overlap.
+    if EggList.Visible then
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 488)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 513)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 513)
+    else
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+    end
 end)
 
 -- ==================== BASE FINDER ====================
@@ -645,7 +661,7 @@ local function findTargetEgg()
 end
 
 local function waitForEggTaken(egg, timeout)
-    local deadline = os.clock() + (timeout or 3)
+    local deadline = os.clock() + (timeout or 1.5)
     while os.clock() < deadline do
         if not autoSteal then
             return false
@@ -656,7 +672,7 @@ local function waitForEggTaken(egg, timeout)
             return true
         end
 
-        task.wait(0.1)
+        task.wait(0.02)
     end
 
     return false
@@ -689,7 +705,7 @@ local function stealOneEgg(egg)
 
     if eggPart and prompt then
         teleportCharacter(eggPart.CFrame)
-        task.wait(0.08)
+        task.wait(0.02)
 
         -- Hold 0.0s. Roblox documents HoldDuration=0 as immediate activation.
         pcall(function()
@@ -713,9 +729,8 @@ local function stealOneEgg(egg)
         success = waitForEggTaken(egg, 3)
 
         if success then
-            task.wait(0.15)
             returnAfterSuccess()
-            task.wait(0.25)
+            task.wait(0.05)
         else
             warn("[OLIVER] Steal was triggered but Egg was not confirmed taken; not returning")
         end
@@ -742,7 +757,7 @@ AutoStealBtn.MouseButton1Click:Connect(function()
                 if egg then
                     stealOneEgg(egg)
                 else
-                    task.wait(0.25)
+                    task.wait(0.05)
                 end
             end
         end)
