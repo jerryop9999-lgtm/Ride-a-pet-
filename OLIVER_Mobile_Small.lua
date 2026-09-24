@@ -47,34 +47,58 @@ local function makeDraggable(gui)
     local dragging = false
     local dragInput, dragStart, startPos
 
-    gui.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = gui.Position
+    gui.Active = true
 
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+    gui.InputBegan:Connect(function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1
+            and input.UserInputType ~= Enum.UserInputType.Touch then
+            return
         end
+
+        -- Do not steal a tap from any Button / ScrollingFrame underneath.
+        local objects = game:GetService("GuiService"):GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
+        for _, obj in ipairs(objects) do
+            if obj:IsA("GuiButton") or obj:IsA("ScrollingFrame") then
+                return
+            end
+            if obj == gui then
+                break
+            end
+        end
+
+        dragging = true
+        dragStart = input.Position
+        startPos = gui.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+                dragInput = nil
+            end
+        end)
     end)
 
     gui.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        if not dragging or input ~= dragInput then
+            return
         end
+
+        local delta = input.Position - dragStart
+        gui.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
     end)
 end
-
 -- 3. Button បិទ/បើក Main Frame
 local EggMainFrame
 
@@ -95,7 +119,7 @@ local ToggleCorner = Instance.new("UICorner")
 ToggleCorner.CornerRadius = UDim.new(0, 8)
 ToggleCorner.Parent = ToggleBtn
 
-makeDraggable(ToggleBtn)
+-- ToggleBtn is tap-only on mobile so one finger activates it reliably.
 
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
