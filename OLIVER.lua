@@ -414,6 +414,8 @@ local EggRarity = {
 }
 
 local EggTypes = {"All", "Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
+
+
 local RarityTypes = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
 
 local function isEggTypeSelected(rarity)
@@ -469,6 +471,53 @@ local function getEggType(egg)
     end
     return nil
 end
+
+-- Find the next Egg to steal. This function was missing in the previous build,
+-- which caused "attempt to call a nil value" when Auto Steal was enabled.
+local function findTargetEgg()
+    if not RenderedEggs then return nil end
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local origin = root and root.Position
+
+    local best = nil
+    local bestDistance = math.huge
+    local seen = {}
+
+    for _, obj in ipairs(RenderedEggs:GetDescendants()) do
+        if not seen[obj] and isValidEgg(obj) then
+            seen[obj] = true
+
+            local rarity = getEggType(obj)
+            local allowed = false
+
+            if selectedEggs.All then
+                allowed = true
+            elseif rarity and selectedEggs[rarity] then
+                allowed = true
+            end
+
+            if allowed then
+                local part = obj:FindFirstChild("Handle")
+                if not (part and part:IsA("BasePart")) then
+                    part = obj:IsA("BasePart") and obj or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+                end
+
+                if part and part:IsA("BasePart") then
+                    local distance = origin and (part.Position - origin).Magnitude or 0
+                    if distance < bestDistance then
+                        bestDistance = distance
+                        best = obj
+                    end
+                end
+            end
+        end
+    end
+
+    return best
+end
+
 
 local function refreshEggList()
     for _, child in ipairs(EggList:GetChildren()) do
