@@ -562,145 +562,171 @@ SelectEggBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==================== BASE FINDER ====================
--- Dynamically finds the player's own Ranch/Base/Plot.
--- It checks names, attributes and ValueObjects instead of assuming
--- a fixed Workspace path.
-local function valueMatchesPlayer(value)
-    if value == LocalPlayer then return true end
-    if typeof(value) == "string" then
-        return value == LocalPlayer.Name or value == LocalPlayer.DisplayName
+-- ==================== RETURN POINT / BASKET ====================
+-- Ride A Pet does not expose a documented client-side Owner/ClaimedBy field
+-- that can safely be assumed. For Return=Base, capture the nearest Base/Ranch
+-- candidate to the player's position when Auto Steal is enabled. This avoids
+-- repeatedly scanning for an "Owner" value that the game may not expose.
+local function findReturnPart(container)
+    if not container then return nil end
+    local preferred = {
+        "SpawnLocation", "Spawn", "Home", "HomeSpawn", "Return", "ReturnPoint",
+        "Teleport", "Entrance", "Claim", "ClaimPoint", "Center", "PrimaryPart"
+    }
+    for _, wanted in ipairs(preferred) do
+        local x = container:FindFirstChild(wanted, true)
+        if x and x:IsA("BasePart") then return x end
     end
-    if typeof(value) == "number" then
-        return value == LocalPlayer.UserId
-    end
-    return false
-end
-
-local function candidateOwnerMatch(obj)
-    local score = 0
-
-    -- Attributes
-    for _, attrName in ipairs({
-        "Owner", "owner", "OwnerName", "ownerName",
-        "Player", "PlayerName", "UserId", "OwnerUserId"
-    }) do
-        local ok, value = pcall(function()
-            return obj:GetAttribute(attrName)
-        end)
-        if ok and value ~= nil and valueMatchesPlayer(value) then
-            score += 12
-        end
-    end
-
-    -- Direct ValueObjects
-    for _, child in ipairs(obj:GetChildren()) do
-        if child:IsA("ObjectValue") then
-            if child.Value == LocalPlayer then score += 12 end
-        elseif child:IsA("StringValue") then
-            if valueMatchesPlayer(child.Value) then score += 12 end
-        elseif child:IsA("IntValue") or child:IsA("NumberValue") then
-            if valueMatchesPlayer(child.Value) then score += 12 end
-        end
-    end
-
-    local n = obj.Name:lower()
-    if n == LocalPlayer.Name:lower() then score += 10 end
-    if n == LocalPlayer.DisplayName:lower() then score += 8 end
-
-    return score
+    if container:IsA("BasePart") then return container end
+    if container:IsA("Model") and container.PrimaryPart then return container.PrimaryPart end
+    return container:FindFirstChildWhichIsA("BasePart", true)
 end
 
 local function baseNameScore(obj)
     local n = obj.Name:lower()
     local score = 0
-    if n:find("ranch", 1, true) then score += 6 end
+    if n:find("ranch", 1, true) then score += 10 end
+    if n:find("base", 1, true) then score += 8 end
     if n:find("plot", 1, true) then score += 6 end
-    if n:find("base", 1, true) then score += 5 end
-    if n:find("home", 1, true) then score += 3 end
+    if n:find("home", 1, true) then score += 4 end
     return score
 end
 
-local function findReturnPart(container)
-    if not container then return nil end
-
-    local preferred = {
-        "SpawnLocation", "Spawn", "Home", "HomeSpawn",
-        "Return", "ReturnPoint", "Teleport", "Entrance",
-        "Claim", "ClaimPoint", "Center", "PrimaryPart"
-    }
-
-    for _, wanted in ipairs(preferred) do
-        local x = container:FindFirstChild(wanted, true)
-        if x and x:IsA("BasePart") then
-            return x
-        end
-    end
-
-    if container:IsA("BasePart") then return container end
-    if container:IsA("Model") and container.PrimaryPart then
-        return container.PrimaryPart
-    end
-
-    return container:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local cachedBasePart = nil
-local cachedBaseScore = 0
-local lastBaseScan = 0
-
-local function findPlayerBase()
-    -- Refresh periodically because plots can be created/claimed after script start.
-    if cachedBasePart and cachedBasePart.Parent and (os.clock() - lastBaseScan) < 2 then
-        return cachedBasePart
-    end
-
-    lastBaseScan = os.clock()
-    cachedBasePart = nil
-    cachedBaseScore = 0
-
-    local keywords = {"base", "bases", "ranch", "ranches", "plot", "plots", "home"}
+local function findNearestBaseTo(position)
+    if not position then return nil end
+    local best, bestScore = nil, math.huge
+    local seen = {}
+    local keywords = {"ranch", "base", "plot", "home"}
 
     local function hasKeyword(name)
-        name = name:lower()
-        for _, key in ipairs(keywords) do
-            if name:find(key, 1, true) then return true end
+        local n = name:lower()
+        for _, k in ipairs(keywords) do
+            if n:find(k, 1, true) then return true end
         end
         return false
     end
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if hasKeyword(obj.Name) then
-            local score = baseNameScore(obj) + candidateOwnerMatch(obj)
             local part = findReturnPart(obj)
+            if part and not seen[part] then
+                seen[part] = true
+                local d = (part.Position - position).Magnitude
+                -- Prefer nearby candidates; small name bonus breaks ties.
+                local score = d - baseNameScore(obj) * 1.5
+                if score < bestScore then
+                    bestScore = score
+                    best = part
+                end
+            end
+        end
+    end
+    return best
+end
 
-            if part then
-                -- Prefer bases that are explicitly owned by the local player.
-                -- Do not pick an arbitrary object merely because its name contains
-                -- "base"/"plot"/"ranch".
-                if score > cachedBaseScore and candidateOwnerMatch(obj) > 0 then
-                    cachedBaseScore = score
-                    cachedBasePart = part
+local savedBaseCFrame = nil
+local savedBasePart = nil
+
+local function captureReturnBase()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local part = findNearestBaseTo(root.Position)
+    if part then
+        savedBasePart = part
+        savedBaseCFrame = part.CFrame
+        print("[OLIVER] Return Base captured:", part:GetFullName())
+        return savedBaseCFrame
+    end
+
+    -- If the game does not expose a named Base/Ranch object, keep the exact
+    -- activation position as a safe fallback instead of looping forever.
+    savedBasePart = nil
+    savedBaseCFrame = root.CFrame
+    warn("[OLIVER] Named Base/Ranch not found; using Auto Steal start position as Return Base.")
+    return savedBaseCFrame
+end
+
+local function getRanchCFrame()
+    if savedBasePart and savedBasePart.Parent then
+        savedBaseCFrame = savedBasePart.CFrame
+    end
+    return savedBaseCFrame
+end
+
+-- ==================== EGG BASKET STATE ====================
+local function collectGuiTextRoots()
+    local roots = {}
+    local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(roots, pg) end
+    table.insert(roots, CoreGui)
+    local hui = gethui and gethui()
+    if hui then table.insert(roots, hui) end
+    return roots
+end
+
+local function readBasketState()
+    local full = false
+    local counts = {}
+    local foundBasket = false
+
+    local function inspect(root)
+        if not root then return end
+        for _, d in ipairs(root:GetDescendants()) do
+            if d:IsA("TextLabel") or d:IsA("TextButton") then
+                local txt = tostring(d.Text or "")
+                local low = txt:lower()
+                if low:find("egg basket", 1, true) then
+                    foundBasket = true
+                end
+                if low:find("egg basket is full", 1, true) then
+                    full = true
+                end
+                -- Common capacity formats: 1/1, 0/1, x1.
+                local a,b = txt:match("(%d+)%s*/%s*(%d+)")
+                if a and b then
+                    local n, cap = tonumber(a), tonumber(b)
+                    if cap and cap > 0 then
+                        table.insert(counts, {count=n, cap=cap})
+                        if n >= cap then full = true end
+                    end
                 end
             end
         end
     end
 
-    if cachedBasePart then
-        print("[OLIVER] Owned Base found:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
-    else
-        warn("[OLIVER] Explicitly-owned Base/Ranch was not found")
+    for _, root in ipairs(collectGuiTextRoots()) do
+        pcall(inspect, root)
     end
 
-    return cachedBasePart
+    local count, cap
+    for _, x in ipairs(counts) do
+        if not count or x.cap > cap then count, cap = x.count, x.cap end
+    end
+    return {full=full, count=count, cap=cap, found=foundBasket}
 end
 
-local function getRanchCFrame()
-    local part = findPlayerBase()
-    if part then
-        return part.CFrame
+local function waitForBasketChange(before, timeout)
+    local deadline = os.clock() + (timeout or 6)
+    while os.clock() < deadline do
+        if not autoSteal then return false end
+        local now = readBasketState()
+        if now.full and before and before.full then
+            -- It was already full; no new Egg can be added.
+            return false
+        end
+        if before and before.count ~= nil and now.count ~= nil and now.count > before.count then
+            return true
+        end
+        -- If the UI reports a full basket after it was not full, an Egg was
+        -- accepted into the final slot.
+        if before and not before.full and now.full then
+            return true
+        end
+        task.wait(0.05)
     end
-    return nil
+    return false
 end
 
 local function getEggPart(egg)
@@ -821,100 +847,33 @@ local function hasLocalOwnershipMarker(root)
     return false
 end
 
-local function containsNamedOwnedObject(root, targetName)
-    if not root or not targetName then return false end
-    if root.Name == targetName and hasLocalOwnershipMarker(root) then
-        return true
-    end
-    for _, d in ipairs(root:GetDescendants()) do
-        if d.Name == targetName and hasLocalOwnershipMarker(d) then
-            return true
-        end
-    end
-    return false
-end
-
-local function findOwnedEggEvidence(egg)
-    if not egg then return false end
-    local targetName = egg.Name
-
-    -- A) Original egg gets an explicit ownership marker.
-    if hasLocalOwnershipMarker(egg) then
-        return true
-    end
-
-    -- B) Game reparents/moves an owned copy into a player-owned container.
-    local roots = {
-        LocalPlayer.Character,
-        LocalPlayer:FindFirstChild("Backpack"),
-        LocalPlayer:FindFirstChild("Inventory"),
-        LocalPlayer:FindFirstChild("Pets"),
-        LocalPlayer:FindFirstChild("Eggs")
-    }
-    for _, root in ipairs(roots) do
-        if containsNamedOwnedObject(root, targetName) then
-            return true
-        end
-    end
-
-    -- C) If the game puts the claimed Egg into the player's own ranch/base,
-    -- treat a same-named object with an ownership marker as confirmation.
-    local base = findPlayerBase()
-    if base then
-        local container = base:FindFirstAncestorOfClass("Model") or base.Parent
-        if container and containsNamedOwnedObject(container, targetName) then
-            return true
-        end
-    end
-
-    return false
-end
-
-local function findTargetEgg()
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-    if not RenderedEggs then return nil end
-
-    for _, egg in ipairs(RenderedEggs:GetChildren()) do
-        if isValidEgg(egg) and isEggTypeSelected(getEggType(egg)) then
-            if getEggPart(egg) and getStealPrompt(egg) then
-                return egg
-            end
-        end
-    end
-
-    return nil
-end
-
-local function waitForEggTaken(egg, timeout)
-    local deadline = os.clock() + (timeout or 4)
+local function waitForEggTaken(egg, timeout, basketBefore)
+    local deadline = os.clock() + (timeout or 6)
     local sawRemoved = false
-
     while os.clock() < deadline do
-        if not autoSteal then
+        if not autoSteal then return false end
+        if basketBefore and basketBefore.full then
+            warn("[OLIVER] Egg Basket is already full; cannot confirm another Egg.")
+            StealStatus.Text = "Status: Egg Basket FULL — PAUSED"
             return false
         end
-
-        -- SUCCESS: the game has explicitly marked this Egg as belonging to us
-        -- (or moved an owned copy into a player-owned container).
-        if findOwnedEggEvidence(egg) then
+        local basketNow = readBasketState()
+        if basketBefore and basketBefore.count ~= nil and basketNow.count ~= nil and basketNow.count > basketBefore.count then
             return true
         end
-
-        -- If it disappears/reparents before ownership is visible, remember that
-        -- state but DO NOT return yet. Another player may have taken it.
+        if basketBefore and not basketBefore.full and basketNow.full then
+            return true
+        end
         if not egg or not egg.Parent or not RenderedEggs or not egg:IsDescendantOf(RenderedEggs) then
             sawRemoved = true
         end
-
-        task.wait(0.03)
+        task.wait(0.05)
     end
-
     if sawRemoved then
-        warn("[OLIVER] Egg disappeared, but ownership was not confirmed; will NOT return or count it as stolen")
+        warn("[OLIVER] Egg disappeared but Basket did not confirm it; NOT returning and NOT taking another Egg.")
     else
-        warn("[OLIVER] Egg ownership was not confirmed; will NOT return or count it as stolen")
+        warn("[OLIVER] Basket did not confirm the Egg; Auto Steal will pause.")
     end
-
     return false
 end
 
@@ -929,10 +888,10 @@ local function returnAfterSuccess()
     local targetCFrame = nil
 
     if returnMode == "Base" then
-        targetCFrame = getRanchCFrame()
+        targetCFrame = getRanchCFrame() or autoStealStartCFrame
         if not targetCFrame then
-            warn("[OLIVER] Base not detected. Auto Steal will NOT continue to the next Egg.")
-            StealStatus.Text = "Status: Base not detected — PAUSED"
+            warn("[OLIVER] No Return Base or Start Position available. Auto Steal paused.")
+            StealStatus.Text = "Status: No Return Point — PAUSED"
             return false
         end
     else
@@ -969,6 +928,18 @@ local function stealOneEgg(egg)
     local success = false
     local eggPart = getEggPart(egg)
     local prompt = getStealPrompt(egg)
+    local basketBefore = readBasketState()
+
+    if basketBefore.full then
+        StealStatus.Text = "Status: Egg Basket FULL — PAUSED"
+        warn("[OLIVER] Egg Basket is full before Steal; stopping Auto Steal.")
+        autoSteal = false
+        AutoStealBtn.Text = "Auto Steal | PAUSED"
+        AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 90, 0)
+        setMovementLocked(false)
+        stealBusy = false
+        return
+    end
 
     if eggPart and prompt then
         -- Fly/teleport directly to the middle of the Egg. The tiny 0.8-stud
@@ -995,7 +966,7 @@ local function stealOneEgg(egg)
 
         -- IMPORTANT: do not return just because the Egg disappeared. Wait until
         -- the game explicitly shows that the Egg belongs to LocalPlayer.
-        success = waitForEggTaken(egg, 6)
+        success = waitForEggTaken(egg, 6, basketBefore)
 
         if success then
             StealStatus.Text = "Status: Ownership confirmed ✓ — RETURNING"
@@ -1035,6 +1006,9 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
         autoStealStartCFrame = root and root.CFrame or nil
+        savedBaseCFrame = nil
+        savedBasePart = nil
+        captureReturnBase()
 
         AutoStealBtn.Text = "Auto Steal | ON"
         StealStatus.Text = "Status: Waiting for Egg..."
@@ -1061,6 +1035,8 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         setMovementLocked(false)
         autoStealStartCFrame = nil
+        savedBaseCFrame = nil
+        savedBasePart = nil
     end
 end)
 
