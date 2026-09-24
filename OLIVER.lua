@@ -850,8 +850,8 @@ local function stealOneEgg(egg)
         -- Hover just a little above the Egg, close enough for the prompt.
         -- Keep the character locked to the Egg so tree/high-place Eggs cannot
         -- make the character fall while the pickup is being confirmed.
-        teleportCharacter(eggPart.CFrame, 1.25)
-        local releaseEggLock = lockToEgg(eggPart, 1.25)
+        teleportCharacter(eggPart.CFrame, 0.75)
+        local releaseEggLock = lockToEgg(eggPart, 0.75)
         task.wait(0.005)
 
         -- Hold 0.0s. Roblox documents HoldDuration=0 as immediate activation.
@@ -859,19 +859,49 @@ local function stealOneEgg(egg)
             prompt.HoldDuration = 0
         end)
 
-        if fireproximityprompt then
-            pcall(function()
-                fireproximityprompt(prompt, 0, true)
-            end)
-        else
-            pcall(function()
-                prompt:InputHoldBegin()
-                prompt:InputHoldEnd()
-            end)
+        local function activateStealPrompt()
+            local fired = false
+
+            -- Prefer the executor prompt trigger when available.
+            if fireproximityprompt then
+                fired = pcall(function()
+                    fireproximityprompt(prompt, 0, true)
+                end)
+            end
+
+            -- Also use the normal ProximityPrompt input path when available.
+            -- Some games do not react to the executor helper consistently.
+            if not fired then
+                pcall(function()
+                    prompt:InputHoldBegin()
+                    task.wait(0.02)
+                    prompt:InputHoldEnd()
+                end)
+            end
         end
 
-        -- Wait for the normal Egg removal/reparent signal first.
-        success = waitForEggTaken(egg)
+        -- Keep trying the SAME Egg until the server/game actually accepts the pickup.
+        -- There is intentionally no short retry deadline: we never switch to another
+        -- Egg and never return to Base just because a few seconds elapsed.
+        while autoSteal do
+            local removed = (not egg) or (not egg.Parent) or (not RenderedEggs)
+                or (not egg:IsDescendantOf(RenderedEggs))
+
+            if removed then
+                -- Give replication a tiny moment, then require the Egg to remain gone.
+                task.wait(0.06)
+                local stillGone = (not egg) or (not egg.Parent) or (not RenderedEggs)
+                    or (not egg:IsDescendantOf(RenderedEggs))
+                if stillGone then
+                    success = true
+                    break
+                end
+            end
+
+            -- Prompt did not take yet: try again on the SAME Egg.
+            activateStealPrompt()
+            task.wait(0.08)
+        end
         releaseEggLock()
 
         -- IMPORTANT: A triggered prompt is NOT proof that the Egg was taken.
