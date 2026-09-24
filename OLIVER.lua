@@ -284,11 +284,12 @@ local EggList
 
 local ReturnList = Instance.new("Frame")
 ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
-ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 306)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
-ReturnList.ZIndex = 110
+ReturnList.ZIndex = 300
+ReturnList.Active = true
 ReturnList.Parent = MainScroll
 
 local ReturnLayout = Instance.new("UIListLayout")
@@ -304,7 +305,8 @@ local function addReturnOption(textValue, order)
     b.TextColor3 = Color3.fromRGB(255, 255, 255)
     b.Font = Enum.Font.SourceSans
     b.TextSize = 13
-    b.ZIndex = 111
+    b.ZIndex = 301
+    b.AutoButtonColor = true
     b.Parent = ReturnList
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 5)
@@ -324,7 +326,7 @@ ReturnBtn.MouseButton1Click:Connect(function()
     MainScroll.CanvasPosition = Vector2.new(0, 0)
     ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
     ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-    ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+    ReturnList.Position = UDim2.new(0.075, 0, 0, 306)
     ReturnList.Visible = not ReturnList.Visible
 end)
 
@@ -552,11 +554,11 @@ SelectEggBtn.MouseButton1Click:Connect(function()
     if EggList.Visible then
         ReturnLabel.Position = UDim2.new(0.075, 0, 0, 488)
         ReturnBtn.Position = UDim2.new(0.075, 0, 0, 513)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 513)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 549)
     else
         ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
         ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 306)
     end
 end)
 
