@@ -77,10 +77,11 @@ makeDraggable(ToggleBtn)
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 330)
+MainFrame.Size = UDim2.new(0, 320, 0, 500)
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = false
 MainFrame.Visible = true
 MainFrame.Parent = ScreenGui
 
@@ -112,7 +113,7 @@ end)
 -- 5. ESP EGG Button
 local EspEggBtn = Instance.new("TextButton")
 EspEggBtn.Size = UDim2.new(0.85, 0, 0, 42)
-EspEggBtn.Position = UDim2.new(0.075, 0, 0.20, 0)
+EspEggBtn.Position = UDim2.new(0.075, 0, 0, 70)
 EspEggBtn.Text = "ESP EGG | OFF"
 EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 EspEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -127,7 +128,7 @@ BtnCorner.Parent = EspEggBtn
 
 -- ==================== AUTO STEAL ====================
 local autoSteal = false
-local selectedEgg = "All" -- rarity/type selector
+local selectedEggs = { All = true } -- multi-select rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
 local autoStealStartCFrame = nil
@@ -135,7 +136,7 @@ local returnMode = "Start Position" -- "Start Position" or "Base"
 
 local AutoStealBtn = Instance.new("TextButton")
 AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 38)
-AutoStealBtn.Position = UDim2.new(0.075, 0, 0.38, 0)
+AutoStealBtn.Position = UDim2.new(0.075, 0, 0, 120)
 AutoStealBtn.Text = "Auto Steal | OFF"
 AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 AutoStealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -149,7 +150,7 @@ AutoCorner.Parent = AutoStealBtn
 
 local SelectLabel = Instance.new("TextLabel")
 SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
-SelectLabel.Position = UDim2.new(0.075, 0, 0.54, 0)
+SelectLabel.Position = UDim2.new(0.075, 0, 0, 168)
 SelectLabel.Text = "Select Egg Type"
 SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
 SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -160,7 +161,7 @@ SelectLabel.Parent = MainFrame
 
 local SelectEggBtn = Instance.new("TextButton")
 SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 34)
-SelectEggBtn.Position = UDim2.new(0.075, 0, 0.64, 0)
+SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 194)
 SelectEggBtn.Text = "All  ∨"
 SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -174,7 +175,7 @@ SelectCorner.Parent = SelectEggBtn
 
 local ReturnLabel = Instance.new("TextLabel")
 ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
-ReturnLabel.Position = UDim2.new(0.075, 0, 0.755, 0)
+ReturnLabel.Position = UDim2.new(0.075, 0, 0, 380)
 ReturnLabel.Text = "Return To"
 ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
 ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -185,7 +186,7 @@ ReturnLabel.Parent = MainFrame
 
 local ReturnBtn = Instance.new("TextButton")
 ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
-ReturnBtn.Position = UDim2.new(0.075, 0, 0.82, 0)
+ReturnBtn.Position = UDim2.new(0.075, 0, 0, 405)
 ReturnBtn.Text = "Start Position  ∨"
 ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -199,11 +200,11 @@ ReturnCorner.Parent = ReturnBtn
 
 local ReturnList = Instance.new("Frame")
 ReturnList.Size = UDim2.new(0.85, 0, 0, 68)
-ReturnList.Position = UDim2.new(0.075, 0, 0.82, 0)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 405)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
-ReturnList.ZIndex = 20
+ReturnList.ZIndex = 110
 ReturnList.Parent = MainFrame
 
 local ReturnLayout = Instance.new("UIListLayout")
@@ -219,7 +220,7 @@ local function addReturnOption(textValue, order)
     b.TextColor3 = Color3.fromRGB(255, 255, 255)
     b.Font = Enum.Font.SourceSans
     b.TextSize = 13
-    b.ZIndex = 21
+    b.ZIndex = 111
     b.Parent = ReturnList
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 5)
@@ -238,13 +239,14 @@ ReturnBtn.MouseButton1Click:Connect(function()
 end)
 
 local EggList = Instance.new("ScrollingFrame")
-EggList.Size = UDim2.new(0.85, 0, 0, 105)
-EggList.Position = UDim2.new(0.075, 0, 0.69, 0)
+EggList.Size = UDim2.new(0.85, 0, 0, 230)
+EggList.Position = UDim2.new(0.075, 0, 0, 230)
 EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 EggList.BorderSizePixel = 0
 EggList.Visible = false
-EggList.ZIndex = 15
-EggList.ScrollBarThickness = 4
+EggList.ZIndex = 200
+EggList.ScrollBarThickness = 6
+EggList.ClipsDescendants = true
 EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
 EggList.Parent = MainFrame
 
@@ -317,6 +319,41 @@ local EggRarity = {
 }
 
 local EggTypes = {"All", "Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
+local RarityTypes = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
+
+local function isEggTypeSelected(rarity)
+    if selectedEggs.All then
+        return true
+    end
+    return rarity ~= nil and selectedEggs[rarity] == true
+end
+
+local function updateEggTypeButtonText()
+    if selectedEggs.All then
+        SelectEggBtn.Text = "All  ∨"
+        return
+    end
+
+    local count = 0
+    for _, rarity in ipairs(RarityTypes) do
+        if selectedEggs[rarity] then
+            count += 1
+        end
+    end
+
+    if count == 0 then
+        SelectEggBtn.Text = "None  ∨"
+    elseif count == 1 then
+        for _, rarity in ipairs(RarityTypes) do
+            if selectedEggs[rarity] then
+                SelectEggBtn.Text = rarity .. "  ∨"
+                return
+            end
+        end
+    else
+        SelectEggBtn.Text = tostring(count) .. " Selected  ∨"
+    end
+end
 
 local function getEggType(egg)
     if not egg then return nil end
@@ -347,26 +384,65 @@ local function refreshEggList()
         local b = Instance.new("TextButton")
         b.Size = UDim2.new(1, -4, 0, 28)
         b.LayoutOrder = order
-        b.Text = eggType
+        b.TextXAlignment = Enum.TextXAlignment.Left
         b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         b.TextColor3 = Color3.fromRGB(255, 255, 255)
         b.Font = Enum.Font.SourceSans
-        b.TextSize = 13
+        b.TextSize = 14
+        b.ZIndex = 201
         b.Parent = EggList
 
         local c = Instance.new("UICorner")
         c.CornerRadius = UDim.new(0, 5)
         c.Parent = b
 
+        local function redraw()
+            local checked = selectedEggs[eggType] == true
+            b.Text = (checked and "☑ " or "☐ ") .. eggType
+            if checked then
+                b.BackgroundColor3 = Color3.fromRGB(0, 120, 75)
+            else
+                b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            end
+        end
+
+        redraw()
+
         b.MouseButton1Click:Connect(function()
-            selectedEgg = eggType
-            SelectEggBtn.Text = eggType .. "  ∨"
-            EggList.Visible = false
+            if eggType == "All" then
+                -- All = every rarity selected. Clicking again clears all.
+                if selectedEggs.All then
+                    selectedEggs = {}
+                else
+                    selectedEggs = { All = true }
+                end
+            else
+                -- Selecting a specific rarity turns off the All shortcut.
+                selectedEggs.All = nil
+                selectedEggs[eggType] = not selectedEggs[eggType]
+            end
+
+            -- If every rarity is selected individually, collapse to All.
+            local allRarities = true
+            for _, rarity in ipairs(RarityTypes) do
+                if not selectedEggs[rarity] then
+                    allRarities = false
+                    break
+                end
+            end
+            if allRarities then
+                selectedEggs = { All = true }
+            end
+
+            updateEggTypeButtonText()
+            refreshEggList()
         end)
     end
 
     EggList.CanvasSize = UDim2.new(0, 0, 0, #EggTypes * 30)
 end
+
+updateEggTypeButtonText()
 
 SelectEggBtn.MouseButton1Click:Connect(function()
     if not EggList.Visible then
@@ -558,7 +634,7 @@ local function findTargetEgg()
     if not RenderedEggs then return nil end
 
     for _, egg in ipairs(RenderedEggs:GetChildren()) do
-        if isValidEgg(egg) and (selectedEgg == "All" or getEggType(egg) == selectedEgg) then
+        if isValidEgg(egg) and isEggTypeSelected(getEggType(egg)) then
             if getEggPart(egg) and getStealPrompt(egg) then
                 return egg
             end
@@ -568,24 +644,61 @@ local function findTargetEgg()
     return nil
 end
 
+local function waitForEggTaken(egg, timeout)
+    local deadline = os.clock() + (timeout or 3)
+    while os.clock() < deadline do
+        if not autoSteal then
+            return false
+        end
+
+        -- Successful pickup in RenderedEggs normally removes/reparents the egg.
+        if not egg or not egg.Parent or not RenderedEggs or not egg:IsDescendantOf(RenderedEggs) then
+            return true
+        end
+
+        task.wait(0.1)
+    end
+
+    return false
+end
+
+local function returnAfterSuccess()
+    if returnMode == "Base" then
+        local baseCFrame = getRanchCFrame()
+        if baseCFrame then
+            return teleportCharacter(baseCFrame)
+        end
+        warn("[OLIVER] Base return point not found; staying at egg")
+        return false
+    end
+
+    if autoStealStartCFrame then
+        return teleportCharacter(autoStealStartCFrame)
+    end
+
+    return false
+end
+
 local function stealOneEgg(egg)
     if stealBusy or not autoSteal or not egg or not egg.Parent then return end
     stealBusy = true
 
+    local success = false
     local eggPart = getEggPart(egg)
     local prompt = getStealPrompt(egg)
+
     if eggPart and prompt then
         teleportCharacter(eggPart.CFrame)
-        task.wait(0.05)
+        task.wait(0.08)
 
-        -- Hold 0.0s: trigger the ProximityPrompt immediately.
+        -- Hold 0.0s. Roblox documents HoldDuration=0 as immediate activation.
         pcall(function()
-            prompt.HoldDuration = holdTime
+            prompt.HoldDuration = 0
         end)
 
         if fireproximityprompt then
             pcall(function()
-                fireproximityprompt(prompt, 1, true)
+                fireproximityprompt(prompt, 0, true)
             end)
         else
             pcall(function()
@@ -594,22 +707,20 @@ local function stealOneEgg(egg)
             end)
         end
 
-        task.wait(0.15)
+        -- IMPORTANT: do not return immediately. Wait until the egg is actually
+        -- removed/reparented from RenderedEggs, which is the success signal we can
+        -- observe locally.
+        success = waitForEggTaken(egg, 3)
 
-        -- Return to either the saved start position or the player's Base.
-        if returnMode == "Base" then
-            local baseCFrame = getRanchCFrame()
-            if baseCFrame then
-                teleportCharacter(baseCFrame)
-            elseif autoStealStartCFrame then
-                teleportCharacter(autoStealStartCFrame)
-            end
-        elseif autoStealStartCFrame then
-            teleportCharacter(autoStealStartCFrame)
+        if success then
+            task.wait(0.15)
+            returnAfterSuccess()
+            task.wait(0.25)
+        else
+            warn("[OLIVER] Steal was triggered but Egg was not confirmed taken; not returning")
         end
     end
 
-    task.wait(0.25)
     stealBusy = false
 end
 
