@@ -114,7 +114,7 @@ MainScroll.Position = UDim2.new(0, 6, 0, 46)
 MainScroll.BackgroundTransparency = 1
 MainScroll.BorderSizePixel = 0
 MainScroll.ScrollBarThickness = 5
-MainScroll.CanvasSize = UDim2.new(0, 0, 0, 600)
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 660)
 MainScroll.ScrollingDirection = Enum.ScrollingDirection.Y
 MainScroll.ClipsDescendants = true
 MainScroll.ZIndex = 5
@@ -313,6 +313,7 @@ addReturnOption("Base", 2)
 
 ReturnBtn.MouseButton1Click:Connect(function()
     EggList.Visible = false
+    EggPage.Visible = false
     MainScroll.CanvasPosition = Vector2.new(0, 0)
     ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
     ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
@@ -725,14 +726,26 @@ end
 local function getStealPrompt(egg)
     if not egg then return nil end
 
-    -- Prefer a prompt explicitly named Steal.
+    -- Fast path: most Eggs keep the prompt close to the model root.
+    for _, x in ipairs(egg:GetChildren()) do
+        if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
+            return x
+        end
+    end
+
+    for _, x in ipairs(egg:GetChildren()) do
+        if x:IsA("ProximityPrompt") then
+            return x
+        end
+    end
+
+    -- Only recurse inside the already-selected Egg model.
     for _, x in ipairs(egg:GetDescendants()) do
         if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
             return x
         end
     end
 
-    -- Fallback to the first ProximityPrompt on the egg.
     for _, x in ipairs(egg:GetDescendants()) do
         if x:IsA("ProximityPrompt") then
             return x
@@ -930,18 +943,12 @@ local function getEggLuck(egg)
     local visible = readLuckFromVisibleText(egg)
     if visible then return visible end
 
-    -- 3) Check a few ancestors for metadata/UI containers.
+    -- 3) Only check the immediate parent for metadata. Avoid recursively
+    -- walking large Map containers for every Egg.
     local parent = egg.Parent
-    for _ = 1, 4 do
-        if not parent or parent == Workspace then break end
-
+    if parent and parent ~= Workspace then
         local n = readLuckFromObject(parent)
         if n then return n end
-
-        local textLuck = readLuckFromVisibleText(parent)
-        if textLuck then return textLuck end
-
-        parent = parent.Parent
     end
 
     -- 4) Known Egg-name fallback.
@@ -1010,11 +1017,50 @@ local function findTargetEgg()
         end
     end
 
+    -- PERFORMANCE:
+    -- Do NOT scan every descendant of Workspace.Map and then recursively scan
+    -- every object again. Large maps can contain thousands of instances and
+    -- this caused Auto Steal to freeze when enabled.
+    --
+    -- Prefer the common Egg containers first. Only inspect direct children of
+    -- those containers; an Egg itself can still be searched recursively for
+    -- its prompt/part.
     local map = Workspace:FindFirstChild("Map")
     if map then
-        for _, obj in ipairs(map:GetDescendants()) do
-            if obj:IsA("Model") then
-                addCandidate(obj)
+        local containers = {}
+
+        local function addContainer(container)
+            if container and not table.find(containers, container) then
+                table.insert(containers, container)
+            end
+        end
+
+        -- Common explicit Egg folders.
+        for _, name in ipairs({
+            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs", "EggSpawns",
+            "EggSpawn", "EggsFolder", "EggModels"
+        }) do
+            addContainer(map:FindFirstChild(name, true))
+        end
+
+        -- If there is no explicit Egg folder, inspect only the first-level
+        -- map children whose names themselves look Egg-related.
+        if #containers == 0 then
+            for _, child in ipairs(map:GetChildren()) do
+                local n = child.Name:lower()
+                if n:find("egg", 1, true)
+                    or n:find("spawn", 1, true)
+                    or n:find("eggzone", 1, true) then
+                    addContainer(child)
+                end
+            end
+        end
+
+        for _, container in ipairs(containers) do
+            for _, child in ipairs(container:GetChildren()) do
+                if child:IsA("Model") then
+                    addCandidate(child)
+                end
             end
         end
     end
@@ -1105,6 +1151,433 @@ local function returnAfterSuccess()
 
     warn("[OLIVER] Return to Base/Start failed; pausing before next Egg")
     return false
+end
+
+
+
+-- ==================== EGG TIMER / TARGET RESET ====================
+-- When an Egg's visible countdown reaches 0, invalidate the cached target
+-- immediately. We do not call an unknown server-side "reset" RemoteEvent;
+-- instead we reset our target and wait for the game's normal respawn/new-Egg
+-- event, which is safer and avoids firing arbitrary remotes.
+local cachedEggExpireAt = 0
+
+local function parseEggCountdown(egg)
+    if not egg then return nil end
+
+    local best = nil
+
+    local function considerText(txt)
+        if not txt then return end
+        local t = tostring(txt):lower()
+
+        -- mm:ss / hh:mm:ss
+        local h, m, sec = t:match("(%d+):(%d+):(%d+)")
+        if h then
+            local total = tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(sec)
+            if total and total >= 0 and (not best or total < best) then best = total end
+            return
+        end
+
+        m, sec = t:match("(%d+):(%d+)")
+        if m then
+            local total = tonumber(m) * 60 + tonumber(sec)
+            if total and total >= 0 and (not best or total < best) then best = total end
+            return
+        end
+
+        -- "15s", "15 sec", "15 seconds"
+        local seconds = t:match("(%d+%.?%d*)%s*s(?:ec(?:ond)?s?)?")
+        if seconds then
+            local total = tonumber(seconds)
+            if total and total >= 0 and (not best or total < best) then best = total end
+        end
+    end
+
+    for _, d in ipairs(egg:GetDescendants()) do
+        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+            considerText(d.Text)
+        end
+    end
+
+    -- Also support timer attributes / values if the game exposes them.
+    for _, key in ipairs({"TimeLeft", "TimeRemaining", "Remaining", "Countdown", "Timer"}) do
+        local ok, value = pcall(function() return egg:GetAttribute(key) end)
+        if ok and value ~= nil then
+            local n = tonumber(value) or parseLuckNumber(value)
+            if n and n >= 0 and (not best or n < best) then
+                best = n
+            end
+        end
+    end
+
+    return best
+end
+
+local function resetExpiredEggTarget()
+    cachedTargetEgg = nil
+    cachedTargetAt = 0
+    cachedEggExpireAt = 0
+end
+
+
+-- ==================== EGG PAGE UI ====================
+-- Shows every requested Egg in priority order, its current Egg Luck, and
+-- its visible countdown. The list is refreshed periodically while the page
+-- is open, so newly spawned Eggs appear without reopening the UI.
+
+local EggPageBtn = Instance.new("TextButton")
+EggPageBtn.Name = "EggPageBtn"
+EggPageBtn.Size = UDim2.new(0.85, 0, 0, 34)
+EggPageBtn.Position = UDim2.new(0.075, 0, 0, 315)
+EggPageBtn.Text = "Egg Page  >"
+EggPageBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+EggPageBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+EggPageBtn.Font = Enum.Font.SourceSansBold
+EggPageBtn.TextSize = 14
+EggPageBtn.Parent = MainScroll
+
+local EggPageCorner = Instance.new("UICorner")
+EggPageCorner.CornerRadius = UDim.new(0, 8)
+EggPageCorner.Parent = EggPageBtn
+
+local EggPage = Instance.new("Frame")
+EggPage.Name = "EggPage"
+EggPage.Size = UDim2.new(0, 300, 0, 405)
+EggPage.Position = UDim2.new(0, 10, 0, 45)
+EggPage.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
+EggPage.BorderSizePixel = 0
+EggPage.Visible = false
+EggPage.ZIndex = 500
+EggPage.Parent = MainFrame
+
+local EggPageCorner2 = Instance.new("UICorner")
+EggPageCorner2.CornerRadius = UDim.new(0, 10)
+EggPageCorner2.Parent = EggPage
+
+local EggPageTitle = Instance.new("TextLabel")
+EggPageTitle.Size = UDim2.new(1, -50, 0, 38)
+EggPageTitle.Position = UDim2.new(0, 12, 0, 0)
+EggPageTitle.BackgroundTransparency = 1
+EggPageTitle.Text = "EGG PAGE | Best → Worst"
+EggPageTitle.TextColor3 = Color3.fromRGB(0, 230, 255)
+EggPageTitle.Font = Enum.Font.SourceSansBold
+EggPageTitle.TextSize = 16
+EggPageTitle.TextXAlignment = Enum.TextXAlignment.Left
+EggPageTitle.ZIndex = 501
+EggPageTitle.Parent = EggPage
+
+local EggPageClose = Instance.new("TextButton")
+EggPageClose.Size = UDim2.new(0, 34, 0, 30)
+EggPageClose.Position = UDim2.new(1, -42, 0, 4)
+EggPageClose.Text = "X"
+EggPageClose.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+EggPageClose.TextColor3 = Color3.fromRGB(255, 255, 255)
+EggPageClose.Font = Enum.Font.SourceSansBold
+EggPageClose.TextSize = 14
+EggPageClose.ZIndex = 501
+EggPageClose.Parent = EggPage
+
+local EggPageCloseCorner = Instance.new("UICorner")
+EggPageCloseCorner.CornerRadius = UDim.new(0, 6)
+EggPageCloseCorner.Parent = EggPageClose
+
+local EggPageList = Instance.new("ScrollingFrame")
+EggPageList.Name = "EggList"
+EggPageList.Size = UDim2.new(1, -16, 1, -50)
+EggPageList.Position = UDim2.new(0, 8, 0, 44)
+EggPageList.BackgroundTransparency = 1
+EggPageList.BorderSizePixel = 0
+EggPageList.ScrollBarThickness = 5
+EggPageList.CanvasSize = UDim2.new(0, 0, 0, 0)
+EggPageList.ZIndex = 501
+EggPageList.Parent = EggPage
+
+local EggPageLayout = Instance.new("UIListLayout")
+EggPageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+EggPageLayout.Padding = UDim.new(0, 3)
+EggPageLayout.Parent = EggPageList
+
+local RequestedEggNames = {
+    "White Egg",
+    "Brown Egg",
+    "Cracked Egg",
+    "Easter Egg",
+    "Stone Egg",
+    "Leaf Egg",
+    "Mushroom Egg",
+    "Flower Egg",
+    "Slime Egg",
+    "Ice Egg",
+    "Glass Egg",
+    "Golden Egg",
+    "Crystal Egg",
+    "Skull Egg",
+    "Dominus Egg",
+    "Flaming Egg",
+    "Sinister Egg",
+    "Soul Egg",
+    "Aurora Egg",
+    "Galaxy Egg",
+    "Black Hole Egg",
+    "Cherub Egg",
+}
+
+local function formatEggCountdown(seconds)
+    if seconds == nil then return "--:--" end
+    seconds = math.max(0, math.floor(seconds + 0.5))
+
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local sec = seconds % 60
+
+    if h > 0 then
+        return string.format("%02d:%02d:%02d", h, m, sec)
+    end
+
+    return string.format("%02d:%02d", m, sec)
+end
+
+local function findLiveEggByName(name)
+    local found = nil
+    local foundLuck = -1
+    local seen = {}
+
+    local function inspectContainer(container)
+        if not container then return end
+
+        for _, egg in ipairs(container:GetChildren()) do
+            if not seen[egg] then
+                seen[egg] = true
+                if egg:IsA("Model") and egg.Name:lower() == name:lower() then
+                    local luck = getEggLuck(egg)
+                    if luck > foundLuck then
+                        found = egg
+                        foundLuck = luck
+                    end
+                end
+            end
+        end
+    end
+
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    inspectContainer(RenderedEggs)
+
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        for _, containerName in ipairs({
+            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
+            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
+        }) do
+            inspectContainer(map:FindFirstChild(containerName, true))
+        end
+    end
+
+    return found
+end
+
+local function clearEggPageRows()
+    for _, child in ipairs(EggPageList:GetChildren()) do
+        if child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+end
+
+local function refreshEggPage()
+    if not EggPage.Visible then return end
+
+    clearEggPageRows()
+
+    local rows = {}
+    for _, name in ipairs(RequestedEggNames) do
+        local liveEgg = findLiveEggByName(name)
+        local luck = KnownEggLuck[name] or 0
+
+        if liveEgg then
+            local liveLuck = getEggLuck(liveEgg)
+            if liveLuck and liveLuck > 0 then
+                luck = liveLuck
+            end
+        end
+
+        local countdown = liveEgg and parseEggCountdown(liveEgg) or nil
+
+        table.insert(rows, {
+            name = name,
+            luck = luck,
+            countdown = countdown,
+            live = liveEgg ~= nil,
+            target = (cachedTargetEgg == liveEgg and liveEgg ~= nil),
+        })
+    end
+
+    table.sort(rows, function(a, b)
+        if a.luck ~= b.luck then
+            return a.luck > b.luck
+        end
+        return a.name < b.name
+    end)
+
+    for index, row in ipairs(rows) do
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -4, 0, 27)
+        label.LayoutOrder = index
+        label.BackgroundColor3 = row.target
+            and Color3.fromRGB(0, 95, 70)
+            or (row.live and Color3.fromRGB(35, 35, 48) or Color3.fromRGB(27, 27, 37))
+        label.BorderSizePixel = 0
+        label.TextColor3 = row.live and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 130, 140)
+        label.Font = row.target and Enum.Font.SourceSansBold or Enum.Font.SourceSans
+        label.TextSize = 13
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.ZIndex = 502
+
+        local status = row.live and formatEggCountdown(row.countdown) or "NOT SPAWNED"
+        local targetMark = row.target and "  ★" or ""
+        label.Text = string.format(
+            "#%02d  %s%s  | Luck %s | %s",
+            index,
+            row.name,
+            targetMark,
+            tostring(row.luck),
+            status
+        )
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = label
+
+        label.Parent = EggPageList
+    end
+
+    EggPageList.CanvasSize = UDim2.new(0, 0, 0, #rows * 30)
+end
+
+EggPageBtn.MouseButton1Click:Connect(function()
+    EggList.Visible = false
+    ReturnList.Visible = false
+    EggPage.Visible = true
+    refreshEggPage()
+end)
+
+EggPageClose.MouseButton1Click:Connect(function()
+    EggPage.Visible = false
+end)
+
+task.spawn(function()
+    while ScreenGui.Parent do
+        if EggPage.Visible then
+            refreshEggPage()
+        end
+        task.wait(0.5)
+    end
+end)
+
+local cachedTargetEgg = nil
+local cachedTargetAt = 0
+local TARGET_SCAN_INTERVAL = 0.35
+
+-- Wake Auto Steal immediately when a new Egg is inserted into a watched
+-- container. The small periodic fallback below is kept only for games that
+-- do not fire ChildAdded for their final Egg state.
+local eggSpawnEvent = Instance.new("BindableEvent")
+local eggSpawnConnections = {}
+
+local function disconnectEggSpawnWatchers()
+    for _, connection in ipairs(eggSpawnConnections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(eggSpawnConnections)
+end
+
+local function signalEggSpawn()
+    resetExpiredEggTarget()
+    pcall(function()
+        eggSpawnEvent:Fire()
+    end)
+end
+
+local function watchEggContainer(container)
+    if not container then return end
+
+    local connection = container.ChildAdded:Connect(function(obj)
+        if not autoSteal then return end
+        if obj:IsA("Model") or obj:IsA("BasePart") then
+            -- Give the game one frame to finish attaching the Prompt/Luck UI.
+            task.defer(function()
+                if autoSteal then
+                    signalEggSpawn()
+                end
+            end)
+        end
+    end)
+
+    table.insert(eggSpawnConnections, connection)
+end
+
+local function setupEggSpawnWatchers()
+    disconnectEggSpawnWatchers()
+
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    if RenderedEggs then
+        watchEggContainer(RenderedEggs)
+    end
+
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        for _, name in ipairs({
+            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
+            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
+        }) do
+            local container = map:FindFirstChild(name, true)
+            if container then
+                watchEggContainer(container)
+            end
+        end
+    end
+end
+
+local function getCachedTargetEgg()
+    local now = os.clock()
+
+    if cachedTargetEgg then
+        local stillInRendered = RenderedEggs and cachedTargetEgg:IsDescendantOf(RenderedEggs)
+        local stillInMap = false
+        local map = Workspace:FindFirstChild("Map")
+        if map then
+            stillInMap = cachedTargetEgg:IsDescendantOf(map)
+        end
+
+        if not cachedTargetEgg.Parent or (not stillInRendered and not stillInMap) then
+            resetExpiredEggTarget()
+        elseif cachedEggExpireAt > 0 and now >= cachedEggExpireAt then
+            -- Countdown finished: reset our Egg target and immediately look for
+            -- the next/new Egg. The game's own respawn system remains untouched.
+            resetExpiredEggTarget()
+        elseif (now - cachedTargetAt) < TARGET_SCAN_INTERVAL then
+            return cachedTargetEgg
+        end
+    end
+
+    local egg = findTargetEgg()
+    cachedTargetEgg = egg
+    cachedTargetAt = now
+
+    if egg then
+        local countdown = parseEggCountdown(egg)
+        if countdown and countdown > 0 then
+            cachedEggExpireAt = now + countdown
+        else
+            cachedEggExpireAt = 0
+        end
+    else
+        cachedEggExpireAt = 0
+    end
+
+    return egg
 end
 
 local function stealOneEgg(egg)
@@ -1233,13 +1706,37 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         -- Prevent manual character movement while the automation is running.
         setMovementLocked(true)
 
+        setupEggSpawnWatchers()
+
         task.spawn(function()
             while autoSteal do
-                local egg = findTargetEgg()
+                local egg = getCachedTargetEgg()
+
                 if egg then
                     stealOneEgg(egg)
                 else
-                    task.wait(0.05)
+                    -- No Egg right now: sleep until a new Egg spawns instead
+                    -- of continuously scanning the whole map.
+                    local fired = false
+                    local connection
+                    connection = eggSpawnEvent.Event:Connect(function()
+                        fired = true
+                    end)
+
+                    local deadline = os.clock() + 0.75
+                    while autoSteal and not fired and os.clock() < deadline do
+                        task.wait(0.05)
+                    end
+
+                    if connection then
+                        connection:Disconnect()
+                    end
+
+                    -- Small fallback rescan for games that don't emit the
+                    -- expected ChildAdded event.
+                    if autoSteal and not fired then
+                        cachedTargetAt = 0
+                    end
                 end
             end
         end)
@@ -1247,6 +1744,8 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         AutoStealBtn.Text = "Auto Steal | OFF"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         setMovementLocked(false)
+        disconnectEggSpawnWatchers()
+        resetExpiredEggTarget()
         autoStealStartCFrame = nil
         capturedReturnBaseCFrame = nil
     end
