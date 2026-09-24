@@ -18,29 +18,12 @@ end
 local function connectTap(button, callback)
     if not button then return end
     setupTouchButton(button)
-    local activeTouch = nil
-    local activeMouse = false
 
-    button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            activeTouch = input
-        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            activeMouse = true
-        end
-    end)
-
-    button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            if activeTouch == input then
-                activeTouch = nil
-                callback()
-            end
-        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if activeMouse then
-                activeMouse = false
-                callback()
-            end
-        end
+    -- Activated is the reliable one-finger event for both
+    -- touch screens and mouse. It avoids InputEnded being swallowed
+    -- by ScrollingFrame/drag handling on phones.
+    button.Activated:Connect(function()
+        callback()
     end)
 end
 
