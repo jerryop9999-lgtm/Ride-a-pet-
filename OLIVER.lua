@@ -376,57 +376,142 @@ SelectEggBtn.MouseButton1Click:Connect(function()
     if EggList.Visible then ReturnList.Visible = false end
 end)
 
--- Finds the player's ranch using common Ride A Pet naming patterns.
-local function getRanchCFrame()
-    local roots = {
-        Workspace:FindFirstChild("Ranches"),
-        Workspace:FindFirstChild("Plots"),
-        Workspace:FindFirstChild("PlayerPlots"),
-        Workspace:FindFirstChild("RanchPlots")
+-- ==================== BASE FINDER ====================
+-- Dynamically finds the player's own Ranch/Base/Plot.
+-- It checks names, attributes and ValueObjects instead of assuming
+-- a fixed Workspace path.
+local function valueMatchesPlayer(value)
+    if value == LocalPlayer then return true end
+    if typeof(value) == "string" then
+        return value == LocalPlayer.Name or value == LocalPlayer.DisplayName
+    end
+    if typeof(value) == "number" then
+        return value == LocalPlayer.UserId
+    end
+    return false
+end
+
+local function candidateOwnerMatch(obj)
+    local score = 0
+
+    -- Attributes
+    for _, attrName in ipairs({
+        "Owner", "owner", "OwnerName", "ownerName",
+        "Player", "PlayerName", "UserId", "OwnerUserId"
+    }) do
+        local ok, value = pcall(function()
+            return obj:GetAttribute(attrName)
+        end)
+        if ok and value ~= nil and valueMatchesPlayer(value) then
+            score += 12
+        end
+    end
+
+    -- Direct ValueObjects
+    for _, child in ipairs(obj:GetChildren()) do
+        if child:IsA("ObjectValue") then
+            if child.Value == LocalPlayer then score += 12 end
+        elseif child:IsA("StringValue") then
+            if valueMatchesPlayer(child.Value) then score += 12 end
+        elseif child:IsA("IntValue") or child:IsA("NumberValue") then
+            if valueMatchesPlayer(child.Value) then score += 12 end
+        end
+    end
+
+    local n = obj.Name:lower()
+    if n == LocalPlayer.Name:lower() then score += 10 end
+    if n == LocalPlayer.DisplayName:lower() then score += 8 end
+
+    return score
+end
+
+local function baseNameScore(obj)
+    local n = obj.Name:lower()
+    local score = 0
+    if n:find("ranch", 1, true) then score += 6 end
+    if n:find("plot", 1, true) then score += 6 end
+    if n:find("base", 1, true) then score += 5 end
+    if n:find("home", 1, true) then score += 3 end
+    return score
+end
+
+local function findReturnPart(container)
+    if not container then return nil end
+
+    local preferred = {
+        "SpawnLocation", "Spawn", "Home", "HomeSpawn",
+        "Return", "ReturnPoint", "Teleport", "Entrance",
+        "Claim", "ClaimPoint", "Center", "PrimaryPart"
     }
 
-    local function findIn(root)
-        if not root then return nil end
+    for _, wanted in ipairs(preferred) do
+        local x = container:FindFirstChild(wanted, true)
+        if x and x:IsA("BasePart") then
+            return x
+        end
+    end
 
-        local candidates = {
-            LocalPlayer.Name,
-            LocalPlayer.DisplayName,
-            "Your Ranch",
-            "Ranch"
-        }
+    if container:IsA("BasePart") then return container end
+    if container:IsA("Model") and container.PrimaryPart then
+        return container.PrimaryPart
+    end
 
-        for _, n in ipairs(candidates) do
-            local x = root:FindFirstChild(n)
-            if x then
-                local part = x:IsA("BasePart") and x or x:FindFirstChildWhichIsA("BasePart", true)
-                if part then return part.CFrame end
+    return container:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local cachedBasePart = nil
+local cachedBaseScore = 0
+local lastBaseScan = 0
+
+local function findPlayerBase()
+    -- Refresh periodically because plots can be created/claimed after script start.
+    if cachedBasePart and cachedBasePart.Parent and (os.clock() - lastBaseScan) < 2 then
+        return cachedBasePart
+    end
+
+    lastBaseScan = os.clock()
+    cachedBasePart = nil
+    cachedBaseScore = 0
+
+    local keywords = {"base", "bases", "ranch", "ranches", "plot", "plots", "home"}
+
+    local function hasKeyword(name)
+        name = name:lower()
+        for _, key in ipairs(keywords) do
+            if name:find(key, 1, true) then return true end
+        end
+        return false
+    end
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if hasKeyword(obj.Name) then
+            local score = baseNameScore(obj) + candidateOwnerMatch(obj)
+            local part = findReturnPart(obj)
+
+            if part then
+                -- Strong preference for an explicitly-owned candidate.
+                if score > cachedBaseScore then
+                    cachedBaseScore = score
+                    cachedBasePart = part
+                end
             end
         end
-
-        for _, x in ipairs(root:GetChildren()) do
-            local text = x.Name:lower()
-            if text:find(LocalPlayer.Name:lower(), 1, true) or text == "your ranch" then
-                local part = x:IsA("BasePart") and x or x:FindFirstChildWhichIsA("BasePart", true)
-                if part then return part.CFrame end
-            end
-        end
-        return nil
     end
 
-    for _, root in ipairs(roots) do
-        local cf = findIn(root)
-        if cf then return cf end
+    if cachedBasePart then
+        print("[OLIVER] Base found:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+    else
+        warn("[OLIVER] Player Base/Ranch was not found")
     end
 
-    -- Fallback: search descendants for an object named after the player.
-    for _, x in ipairs(Workspace:GetDescendants()) do
-        local n = x.Name:lower()
-        if n == LocalPlayer.Name:lower() or n == "your ranch" then
-            local part = x:IsA("BasePart") and x or x:FindFirstChildWhichIsA("BasePart", true)
-            if part then return part.CFrame end
-        end
-    end
+    return cachedBasePart
+end
 
+local function getRanchCFrame()
+    local part = findPlayerBase()
+    if part then
+        return part.CFrame
+    end
     return nil
 end
 
