@@ -147,7 +147,7 @@ local holdTime = 0.0
 local stealBusy = false
 local autoStealStartCFrame = nil
 local capturedReturnBaseCFrame = nil
-local returnMode = "Start Position" -- "Start Position" or "Base"
+local returnMode = "Base" -- "Start Position" or "Base"
 
 -- Lock player movement while Auto Steal is ON so manual input cannot
 -- fight the teleport/steal sequence. Original values are restored on OFF.
@@ -261,7 +261,7 @@ ReturnLabel.Parent = MainScroll
 local ReturnBtn = Instance.new("TextButton")
 ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
 ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-ReturnBtn.Text = "Start Position  ∨"
+ReturnBtn.Text = "Base  ∨"
 ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ReturnBtn.Font = Enum.Font.SourceSans
@@ -570,33 +570,40 @@ end
 local function candidateOwnerMatch(obj)
     local score = 0
 
-    -- Attributes
-    for _, attrName in ipairs({
-        "Owner", "owner", "OwnerName", "ownerName",
-        "Player", "PlayerName", "UserId", "OwnerUserId"
-    }) do
-        local ok, value = pcall(function()
-            return obj:GetAttribute(attrName)
-        end)
-        if ok and value ~= nil and valueMatchesPlayer(value) then
-            score += 12
-        end
+    -- Ownership may be stored on Plot/Ranch while the return part is a child.
+    local containers = {obj}
+    local p = obj.Parent
+    for _ = 1, 6 do
+        if not p then break end
+        table.insert(containers, p)
+        p = p.Parent
     end
 
-    -- Direct ValueObjects
-    for _, child in ipairs(obj:GetChildren()) do
-        if child:IsA("ObjectValue") then
-            if child.Value == LocalPlayer then score += 12 end
-        elseif child:IsA("StringValue") then
-            if valueMatchesPlayer(child.Value) then score += 12 end
-        elseif child:IsA("IntValue") or child:IsA("NumberValue") then
-            if valueMatchesPlayer(child.Value) then score += 12 end
+    for _, container in ipairs(containers) do
+        for _, attrName in ipairs({
+            "Owner", "owner", "OwnerName", "ownerName",
+            "Player", "PlayerName", "UserId", "OwnerUserId"
+        }) do
+            local ok, value = pcall(function() return container:GetAttribute(attrName) end)
+            if ok and value ~= nil and valueMatchesPlayer(value) then
+                score += 25
+            end
         end
-    end
 
-    local n = obj.Name:lower()
-    if n == LocalPlayer.Name:lower() then score += 10 end
-    if n == LocalPlayer.DisplayName:lower() then score += 8 end
+        for _, child in ipairs(container:GetChildren()) do
+            if child:IsA("ObjectValue") then
+                if child.Value == LocalPlayer then score += 25 end
+            elseif child:IsA("StringValue") then
+                if valueMatchesPlayer(child.Value) then score += 25 end
+            elseif child:IsA("IntValue") or child:IsA("NumberValue") then
+                if valueMatchesPlayer(child.Value) then score += 25 end
+            end
+        end
+
+        local n = container.Name:lower()
+        if n == LocalPlayer.Name:lower() then score += 20 end
+        if n == LocalPlayer.DisplayName:lower() then score += 16 end
+    end
 
     return score
 end
@@ -640,7 +647,6 @@ local cachedBaseScore = 0
 local lastBaseScan = 0
 
 local function findPlayerBase()
-    -- Refresh periodically because plots can be created/claimed after script start.
     if cachedBasePart and cachedBasePart.Parent and (os.clock() - lastBaseScan) < 2 then
         return cachedBasePart
     end
@@ -650,7 +656,6 @@ local function findPlayerBase()
     cachedBaseScore = 0
 
     local keywords = {"base", "bases", "ranch", "ranches", "plot", "plots", "home"}
-
     local function hasKeyword(name)
         name = name:lower()
         for _, key in ipairs(keywords) do
@@ -659,25 +664,43 @@ local function findPlayerBase()
         return false
     end
 
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local nearestPart, nearestDistance = nil, math.huge
+
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if hasKeyword(obj.Name) then
-            local score = baseNameScore(obj) + candidateOwnerMatch(obj)
             local part = findReturnPart(obj)
-
             if part then
-                -- Strong preference for an explicitly-owned candidate.
-                if score > cachedBaseScore then
-                    cachedBaseScore = score
-                    cachedBasePart = part
+                local distance = root and (part.Position - root.Position).Magnitude or math.huge
+                if distance < nearestDistance then
+                    nearestDistance = distance
+                    nearestPart = part
+                end
+
+                local ownerScore = candidateOwnerMatch(obj)
+                if ownerScore > 0 then
+                    local score = ownerScore + baseNameScore(obj)
+                    if score > cachedBaseScore then
+                        cachedBaseScore = score
+                        cachedBasePart = part
+                    end
                 end
             end
         end
     end
 
+    -- No owner marker: use the Base/Plot nearest to the player's position at startup,
+    -- instead of arbitrarily selecting another player's plot.
+    if not cachedBasePart then
+        cachedBasePart = nearestPart
+        cachedBaseScore = nearestPart and 1 or 0
+    end
+
     if cachedBasePart then
-        print("[OLIVER] Base found:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+        print("[OLIVER] OWN BASE RETURN:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
     else
-        warn("[OLIVER] Player Base/Ranch was not found")
+        warn("[OLIVER] Player-owned Base/Ranch was not found")
     end
 
     return cachedBasePart
@@ -787,23 +810,33 @@ end
 local function getHatchLuck(egg)
     if not egg then return 0 end
 
-    -- Prefer explicit attributes used by game versions.
+    -- Hatch Luck can be stored on the Egg itself OR on a parent/child
+    -- container depending on the game version. Check the Egg first, then
+    -- nearby descendants/ancestors so Auto Steal does not miss a visible Luck.
     local attrNames = {
-        "HatchLuck", "Hatch Luck", "Luck", "EggLuck", "LuckValue",
-        "HatchLuckValue", "Hatch_Luck"
+        "HatchLuck", "Hatch Luck", "Hatch_Luck", "HatchLuckValue",
+        "Luck", "EggLuck", "LuckValue", "HatchLuckPercent"
     }
-    for _, name in ipairs(attrNames) do
-        local ok, value = pcall(function() return egg:GetAttribute(name) end)
-        if ok and value ~= nil then
-            local n = parseLuckNumber(value)
-            if n then return n end
+
+    local function readAttributes(obj)
+        if not obj then return nil end
+        for _, name in ipairs(attrNames) do
+            local ok, value = pcall(function() return obj:GetAttribute(name) end)
+            if ok and value ~= nil then
+                local n = parseLuckNumber(value)
+                if n then return n end
+            end
         end
+        return nil
     end
 
-    -- Then inspect ValueObjects.
+    local direct = readAttributes(egg)
+    if direct then return direct end
+
+    -- ValueObjects with Luck/HatchLuck names.
     for _, d in ipairs(egg:GetDescendants()) do
-        local lower = d.Name:lower()
-        if lower:find("hatch") and lower:find("luck") or lower == "luck" or lower == "eggluck" then
+        local lower = d.Name:lower():gsub("[%s_%-]", "")
+        if lower:find("hatchluck", 1, true) or lower == "luck" or lower == "eggluck" or lower == "luckvalue" then
             if d:IsA("StringValue") or d:IsA("IntValue") or d:IsA("NumberValue") then
                 local n = parseLuckNumber(d.Value)
                 if n then return n end
@@ -811,19 +844,32 @@ local function getHatchLuck(egg)
         end
     end
 
-    -- Finally inspect displayed text such as "Hatch Luck 500K".
-    -- This is intentionally a fallback because the UI text may vary.
+    -- Some builds put the Luck attribute on the immediate parent folder/model.
+    local parent = egg.Parent
+    for _ = 1, 3 do
+        if not parent or parent == Workspace then break end
+        local n = readAttributes(parent)
+        if n then return n end
+        parent = parent.Parent
+    end
+
+    -- Finally read displayed text. Supports examples like:
+    -- "Hatch Luck: 2.5M", "Luck 500K", "Hatch Luck +90K".
+    local bestTextLuck = nil
     for _, d in ipairs(egg:GetDescendants()) do
         if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-            local txt = d.Text or ""
-            if txt:lower():find("luck") then
-                local n = parseLuckNumber(txt:match("([%d%.]+%s*[kmbt]?)"))
-                if n then return n end
+            local txt = tostring(d.Text or "")
+            local lower = txt:lower()
+            if lower:find("luck", 1, true) or lower:find("hatch", 1, true) then
+                local numberText = txt:match("([%d%.]+%s*[kKmMbBtT]?)")
+                local n = parseLuckNumber(numberText)
+                if n and (not bestTextLuck or n > bestTextLuck) then
+                    bestTextLuck = n
+                end
             end
         end
     end
-
-    return 0
+    return bestTextLuck or 0
 end
 
 local RarityPriority = {
@@ -837,28 +883,64 @@ local RarityPriority = {
 }
 
 local function findTargetEgg()
+    -- Scan BOTH the live RenderedEggs container and Egg models placed directly
+    -- in the game Map/Workspace. Some versions of Ride A Pet expose eggs in
+    -- the map before/while they are mirrored into RenderedEggs.
     RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-    if not RenderedEggs then return nil end
 
     local candidates = {}
+    local seen = {}
 
-    for _, egg in ipairs(RenderedEggs:GetChildren()) do
-        if isValidEgg(egg) and isEggTypeSelected(getEggType(egg)) then
-            if getEggPart(egg) and getStealPrompt(egg) then
-                local rarity = getEggType(egg)
-                table.insert(candidates, {
-                    egg = egg,
-                    luck = getHatchLuck(egg),
-                    rarityPriority = RarityPriority[rarity] or 0,
-                })
+    local function addCandidate(egg)
+        if seen[egg] then return end
+        if not egg or not egg.Parent or not egg:IsA("Model") then return end
+
+        local inRendered = RenderedEggs and egg:IsDescendantOf(RenderedEggs)
+        local nameLower = egg.Name:lower()
+        local looksLikeEgg = nameLower:find("egg") ~= nil
+
+        -- For Map eggs, require an actual Steal prompt and egg part so we do
+        -- not mistake decorative/static egg models for stealable eggs.
+        local part = getEggPart(egg)
+        local prompt = getStealPrompt(egg)
+        if not part or not prompt then return end
+        if not inRendered and not looksLikeEgg then return end
+
+        local rarity = getEggType(egg)
+        if not isEggTypeSelected(rarity) then return end
+
+        seen[egg] = true
+        table.insert(candidates, {
+            egg = egg,
+            luck = getHatchLuck(egg),
+            rarityPriority = RarityPriority[rarity] or 0,
+        })
+    end
+
+    -- 1) Normal live eggs.
+    if RenderedEggs then
+        for _, egg in ipairs(RenderedEggs:GetChildren()) do
+            if isValidEgg(egg) then
+                addCandidate(egg)
             end
         end
     end
 
-    -- IMPORTANT:
-    -- Multiple selected Egg Types are NOT taken in selection order.
-    -- Highest Hatch Luck is always first. If Luck is unavailable/equal,
-    -- higher rarity is used as the deterministic tie-breaker.
+    -- 2) Eggs physically placed in the Map/Workspace. We scan descendants
+    -- but only accept Model + Egg name + real ProximityPrompt, which keeps
+    -- the scan from selecting unrelated map decorations.
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        for _, obj in ipairs(map:GetDescendants()) do
+            if obj:IsA("Model") then
+                addCandidate(obj)
+            end
+        end
+    end
+
+    -- IMPORTANT: Auto Steal always checks Hatch Luck before choosing an Egg.
+    -- Highest Hatch Luck wins. If Luck is unavailable/equal, rarity is the
+    -- deterministic tie-breaker, then Egg name.
     table.sort(candidates, function(a, b)
         if a.luck ~= b.luck then
             return a.luck > b.luck
@@ -869,7 +951,13 @@ local function findTargetEgg()
         return a.egg.Name < b.egg.Name
     end)
 
-    return candidates[1] and candidates[1].egg or nil
+    local target = candidates[1]
+    if target then
+        print(string.format("[OLIVER] Auto Steal target: %s | Hatch Luck: %s", target.egg.Name, tostring(target.luck)))
+        return target.egg
+    end
+
+    return nil
 end
 
 local function waitForEggTaken(egg)
