@@ -4,6 +4,15 @@ local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
+-- Mobile touch support: every TextButton accepts direct finger taps.
+local function setupTouchButton(button)
+    if button and button:IsA("TextButton") then
+        button.Active = true
+        button.Selectable = true
+        button.AutoButtonColor = true
+    end
+end
+
 local LocalPlayer = Players.LocalPlayer
 
 -- Ride A Pet: Eggs are rendered under Workspace.RenderedEggs
@@ -70,6 +79,7 @@ end
 local EggMainFrame
 
 local ToggleBtn = Instance.new("TextButton")
+setupTouchButton(ToggleBtn)
 ToggleBtn.Active = true
 ToggleBtn.Name = "OLIVER"
 ToggleBtn.Size = UDim2.new(0, 78, 0, 32)
@@ -91,8 +101,8 @@ makeDraggable(ToggleBtn)
 local MainFrame = Instance.new("Frame")
 MainFrame.Active = true
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 240, 0, 330)
-MainFrame.Position = UDim2.new(0.5, -130, 0.5, -165)
+MainFrame.Size = UDim2.new(0, 220, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -140)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -141,7 +151,8 @@ end)
 
 -- 5. ESP EGG Button
 local EspEggBtn = Instance.new("TextButton")
-EspEggBtn.Size = UDim2.new(0.85, 0, 0, 42)
+setupTouchButton(EspEggBtn)
+EspEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
 EspEggBtn.Position = UDim2.new(0.075, 0, 0, 70)
 EspEggBtn.Text = "ESP EGG | OFF"
 EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
@@ -224,7 +235,8 @@ local function setMovementLocked(locked)
 end
 
 local AutoStealBtn = Instance.new("TextButton")
-AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 38)
+setupTouchButton(AutoStealBtn)
+AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 44)
 AutoStealBtn.Position = UDim2.new(0.075, 0, 0, 120)
 AutoStealBtn.Text = "Auto Steal | OFF"
 AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
@@ -249,7 +261,8 @@ SelectLabel.TextSize = 14
 SelectLabel.Parent = MainScroll
 
 local SelectEggBtn = Instance.new("TextButton")
-SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 34)
+setupTouchButton(SelectEggBtn)
+SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
 SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 194)
 SelectEggBtn.Text = "All  ∨"
 SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
@@ -274,7 +287,8 @@ ReturnLabel.TextSize = 14
 ReturnLabel.Parent = MainScroll
 
 local ReturnBtn = Instance.new("TextButton")
-ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
+setupTouchButton(ReturnBtn)
+ReturnBtn.Size = UDim2.new(0.85, 0, 0, 44)
 ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
 ReturnBtn.Text = "Base  ∨"
 ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
@@ -305,6 +319,7 @@ ReturnLayout.Parent = ReturnList
 
 local function addReturnOption(textValue, order)
     local b = Instance.new("TextButton")
+        setupTouchButton(b)
     b.Size = UDim2.new(1, -4, 0, 32)
     b.LayoutOrder = order
     b.Text = textValue
@@ -483,6 +498,7 @@ local function refreshEggList()
 
     for order, eggType in ipairs(EggTypes) do
         local b = Instance.new("TextButton")
+        setupTouchButton(b)
         b.Size = UDim2.new(1, -4, 0, 28)
         b.LayoutOrder = order
         b.TextXAlignment = Enum.TextXAlignment.Left
@@ -1242,8 +1258,9 @@ end
 -- is open, so newly spawned Eggs appear without reopening the UI.
 
 local EggPageBtn = Instance.new("TextButton")
+setupTouchButton(EggPageBtn)
 EggPageBtn.Name = "EggPageBtn"
-EggPageBtn.Size = UDim2.new(0.85, 0, 0, 34)
+EggPageBtn.Size = UDim2.new(0.85, 0, 0, 44)
 EggPageBtn.Position = UDim2.new(0.075, 0, 0, 315)
 EggPageBtn.Text = "Egg Page  >"
 EggPageBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
@@ -1260,8 +1277,8 @@ EggPageCorner.Parent = EggPageBtn
 EggMainFrame = Instance.new("Frame")
 EggMainFrame.Active = true
 EggMainFrame.Name = "EggMainFrame"
-EggMainFrame.Size = UDim2.new(0, 240, 0, 330)
-EggMainFrame.Position = UDim2.new(0.5, -130, 0.5, 15)
+EggMainFrame.Size = UDim2.new(0, 220, 0, 280)
+EggMainFrame.Position = UDim2.new(0.5, -110, 0.5, 15)
 EggMainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 EggMainFrame.BorderSizePixel = 0
 EggMainFrame.ClipsDescendants = true
@@ -1306,8 +1323,9 @@ EggMainTitle.ZIndex = 501
 EggMainTitle.Parent = EggMainFrame
 
 local EggMainClose = Instance.new("TextButton")
-EggMainClose.Size = UDim2.new(0, 38, 0, 32)
-EggMainClose.Position = UDim2.new(1, -44, 0, 5)
+setupTouchButton(EggMainClose)
+EggMainClose.Size = UDim2.new(0, 44, 0, 44)
+EggMainClose.Position = UDim2.new(1, -48, 0, 2)
 EggMainClose.Text = "X"
 EggMainClose.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
 EggMainClose.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1333,8 +1351,15 @@ EggPageTitle.ZIndex = 501
 EggPageTitle.Parent = EggPage
 
 local EggPageClose = Instance.new("TextButton")
-EggPageClose.Size = UDim2.new(0, 38, 0, 32)
-EggPageClose.Position = UDim2.new(1, -42, 0, 4)
+setupTouchButton(EggPageClose)
+
+ScreenGui.DescendantAdded:Connect(function(obj)
+    if obj:IsA("TextButton") then
+        setupTouchButton(obj)
+    end
+end)
+EggPageClose.Size = UDim2.new(0, 44, 0, 44)
+EggPageClose.Position = UDim2.new(1, -46, 0, 2)
 EggPageClose.Text = "X"
 EggPageClose.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
 EggPageClose.TextColor3 = Color3.fromRGB(255, 255, 255)
