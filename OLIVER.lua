@@ -77,11 +77,11 @@ makeDraggable(ToggleBtn)
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 320, 0, 580)
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
+MainFrame.Size = UDim2.new(0, 320, 0, 450)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -225)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = false
+MainFrame.ClipsDescendants = true
 MainFrame.Visible = true
 MainFrame.Parent = ScreenGui
 
@@ -106,6 +106,20 @@ TitleLabel.TextSize = 20
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Parent = MainFrame
 
+-- Fixed-height scroll area so the UI stays compact on screen.
+local MainScroll = Instance.new("ScrollingFrame")
+MainScroll.Name = "MainScroll"
+MainScroll.Size = UDim2.new(1, -12, 1, -52)
+MainScroll.Position = UDim2.new(0, 6, 0, 46)
+MainScroll.BackgroundTransparency = 1
+MainScroll.BorderSizePixel = 0
+MainScroll.ScrollBarThickness = 5
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 600)
+MainScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+MainScroll.ClipsDescendants = true
+MainScroll.ZIndex = 5
+MainScroll.Parent = MainFrame
+
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
@@ -119,7 +133,7 @@ EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 EspEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 EspEggBtn.Font = Enum.Font.SourceSansBold
 EspEggBtn.TextSize = 15
-EspEggBtn.Parent = MainFrame
+EspEggBtn.Parent = MainScroll
 
 local BtnCorner = Instance.new("UICorner")
 BtnCorner.CornerRadius = UDim.new(0, 8)
@@ -142,7 +156,7 @@ AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 AutoStealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 AutoStealBtn.Font = Enum.Font.SourceSansBold
 AutoStealBtn.TextSize = 15
-AutoStealBtn.Parent = MainFrame
+AutoStealBtn.Parent = MainScroll
 
 local AutoCorner = Instance.new("UICorner")
 AutoCorner.CornerRadius = UDim.new(0, 8)
@@ -157,7 +171,7 @@ SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
 SelectLabel.BackgroundTransparency = 1
 SelectLabel.Font = Enum.Font.SourceSansBold
 SelectLabel.TextSize = 14
-SelectLabel.Parent = MainFrame
+SelectLabel.Parent = MainScroll
 
 local SelectEggBtn = Instance.new("TextButton")
 SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 34)
@@ -167,7 +181,7 @@ SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 SelectEggBtn.Font = Enum.Font.SourceSans
 SelectEggBtn.TextSize = 14
-SelectEggBtn.Parent = MainFrame
+SelectEggBtn.Parent = MainScroll
 
 local SelectCorner = Instance.new("UICorner")
 SelectCorner.CornerRadius = UDim.new(0, 8)
@@ -182,7 +196,7 @@ ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
 ReturnLabel.BackgroundTransparency = 1
 ReturnLabel.Font = Enum.Font.SourceSansBold
 ReturnLabel.TextSize = 14
-ReturnLabel.Parent = MainFrame
+ReturnLabel.Parent = MainScroll
 
 local ReturnBtn = Instance.new("TextButton")
 ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
@@ -192,20 +206,23 @@ ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ReturnBtn.Font = Enum.Font.SourceSans
 ReturnBtn.TextSize = 14
-ReturnBtn.Parent = MainFrame
+ReturnBtn.Parent = MainScroll
 
 local ReturnCorner = Instance.new("UICorner")
 ReturnCorner.CornerRadius = UDim.new(0, 8)
 ReturnCorner.Parent = ReturnBtn
 
+-- Forward declaration: Return To uses EggList in its click handler.
+local EggList
+
 local ReturnList = Instance.new("Frame")
-ReturnList.Size = UDim2.new(0.85, 0, 0, 68)
+ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
 ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
 ReturnList.ZIndex = 110
-ReturnList.Parent = MainFrame
+ReturnList.Parent = MainScroll
 
 local ReturnLayout = Instance.new("UIListLayout")
 ReturnLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -236,14 +253,15 @@ addReturnOption("Base", 2)
 
 ReturnBtn.MouseButton1Click:Connect(function()
     EggList.Visible = false
+    MainScroll.CanvasPosition = Vector2.new(0, 0)
     ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
     ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
     ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
     ReturnList.Visible = not ReturnList.Visible
 end)
 
-local EggList = Instance.new("ScrollingFrame")
-EggList.Size = UDim2.new(0.85, 0, 0, 250)
+EggList = Instance.new("ScrollingFrame")
+EggList.Size = UDim2.new(0.85, 0, 0, 220)
 EggList.Position = UDim2.new(0.075, 0, 0, 230)
 EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 EggList.BorderSizePixel = 0
@@ -252,7 +270,7 @@ EggList.ZIndex = 200
 EggList.ScrollBarThickness = 6
 EggList.ClipsDescendants = true
 EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
-EggList.Parent = MainFrame
+EggList.Parent = MainScroll
 
 local ListLayout = Instance.new("UIListLayout")
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -316,9 +334,12 @@ local EggRarity = {
     ["Flaming Egg"] = "Mythic",
     ["Sinister Egg"] = "Mythic",
     ["Soul Egg"] = "Mythic",
+    ["90K Luck Egg"] = "Mythic",
+    ["500K Luck Egg"] = "Mythic",
     ["Aurora Egg"] = "Divine",
     ["Galaxy Egg"] = "Divine",
     ["Black Hole Egg"] = "Ethereal",
+    ["Solaris Egg"] = "Ethereal",
     ["Cherub Egg"] = "Ethereal"
 }
 
@@ -444,12 +465,15 @@ local function refreshEggList()
     end
 
     EggList.CanvasSize = UDim2.new(0, 0, 0, #EggTypes * 30 + 4)
+    MainScroll.CanvasSize = UDim2.new(0, 0, 0, 570)
 end
 
 updateEggTypeButtonText()
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 570)
 
 SelectEggBtn.MouseButton1Click:Connect(function()
     if not EggList.Visible then
+        MainScroll.CanvasPosition = Vector2.new(0, 0)
         refreshEggList()
     end
 
