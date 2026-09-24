@@ -77,7 +77,7 @@ makeDraggable(ToggleBtn)
 -- 4. Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 280)
+MainFrame.Size = UDim2.new(0, 300, 0, 330)
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -140)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
@@ -131,6 +131,7 @@ local selectedEgg = "All" -- rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
 local autoStealStartCFrame = nil
+local returnMode = "Start Position" -- "Start Position" or "Base"
 
 local AutoStealBtn = Instance.new("TextButton")
 AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 38)
@@ -171,12 +172,78 @@ local SelectCorner = Instance.new("UICorner")
 SelectCorner.CornerRadius = UDim.new(0, 8)
 SelectCorner.Parent = SelectEggBtn
 
+local ReturnLabel = Instance.new("TextLabel")
+ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
+ReturnLabel.Position = UDim2.new(0.075, 0, 0.755, 0)
+ReturnLabel.Text = "Return To"
+ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
+ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+ReturnLabel.BackgroundTransparency = 1
+ReturnLabel.Font = Enum.Font.SourceSansBold
+ReturnLabel.TextSize = 14
+ReturnLabel.Parent = MainFrame
+
+local ReturnBtn = Instance.new("TextButton")
+ReturnBtn.Size = UDim2.new(0.85, 0, 0, 34)
+ReturnBtn.Position = UDim2.new(0.075, 0, 0.82, 0)
+ReturnBtn.Text = "Start Position  ∨"
+ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ReturnBtn.Font = Enum.Font.SourceSans
+ReturnBtn.TextSize = 14
+ReturnBtn.Parent = MainFrame
+
+local ReturnCorner = Instance.new("UICorner")
+ReturnCorner.CornerRadius = UDim.new(0, 8)
+ReturnCorner.Parent = ReturnBtn
+
+local ReturnList = Instance.new("Frame")
+ReturnList.Size = UDim2.new(0.85, 0, 0, 68)
+ReturnList.Position = UDim2.new(0.075, 0, 0.82, 0)
+ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+ReturnList.BorderSizePixel = 0
+ReturnList.Visible = false
+ReturnList.ZIndex = 20
+ReturnList.Parent = MainFrame
+
+local ReturnLayout = Instance.new("UIListLayout")
+ReturnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ReturnLayout.Parent = ReturnList
+
+local function addReturnOption(textValue, order)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -4, 0, 32)
+    b.LayoutOrder = order
+    b.Text = textValue
+    b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 13
+    b.ZIndex = 21
+    b.Parent = ReturnList
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = b
+    b.MouseButton1Click:Connect(function()
+        returnMode = textValue
+        ReturnBtn.Text = textValue .. "  ∨"
+        ReturnList.Visible = false
+    end)
+end
+addReturnOption("Start Position", 1)
+addReturnOption("Base", 2)
+
+ReturnBtn.MouseButton1Click:Connect(function()
+    ReturnList.Visible = not ReturnList.Visible
+end)
+
 local EggList = Instance.new("ScrollingFrame")
 EggList.Size = UDim2.new(0.85, 0, 0, 105)
-EggList.Position = UDim2.new(0.075, 0, 0.77, 0)
+EggList.Position = UDim2.new(0.075, 0, 0.69, 0)
 EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 EggList.BorderSizePixel = 0
 EggList.Visible = false
+EggList.ZIndex = 15
 EggList.ScrollBarThickness = 4
 EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
 EggList.Parent = MainFrame
@@ -306,6 +373,7 @@ SelectEggBtn.MouseButton1Click:Connect(function()
         refreshEggList()
     end
     EggList.Visible = not EggList.Visible
+    if EggList.Visible then ReturnList.Visible = false end
 end)
 
 -- Finds the player's ranch using common Ride A Pet naming patterns.
@@ -443,11 +511,16 @@ local function stealOneEgg(egg)
 
         task.wait(0.15)
 
-        -- After stealing, always return to the player's Base/Ranch.
-        -- This is independent of where the player was standing when Auto Steal was enabled.
-        local baseCFrame = getRanchCFrame()
-        if baseCFrame then
-            teleportCharacter(baseCFrame)
+        -- Return to either the saved start position or the player's Base.
+        if returnMode == "Base" then
+            local baseCFrame = getRanchCFrame()
+            if baseCFrame then
+                teleportCharacter(baseCFrame)
+            elseif autoStealStartCFrame then
+                teleportCharacter(autoStealStartCFrame)
+            end
+        elseif autoStealStartCFrame then
+            teleportCharacter(autoStealStartCFrame)
         end
     end
 
@@ -459,6 +532,11 @@ AutoStealBtn.MouseButton1Click:Connect(function()
     autoSteal = not autoSteal
 
     if autoSteal then
+        -- Save the exact place the player was standing when Auto Steal was turned ON.
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        autoStealStartCFrame = root and root.CFrame or nil
+
         AutoStealBtn.Text = "Auto Steal | ON"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
 
@@ -475,6 +553,7 @@ AutoStealBtn.MouseButton1Click:Connect(function()
     else
         AutoStealBtn.Text = "Auto Steal | OFF"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        autoStealStartCFrame = nil
     end
 end)
 
