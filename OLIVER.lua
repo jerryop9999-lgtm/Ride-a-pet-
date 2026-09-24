@@ -80,7 +80,7 @@ makeDraggable(ToggleBtn)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 320, 0, 450)
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -225)
+MainFrame.Position = UDim2.new(0.5, -160, 0.5, -330)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -1252,7 +1252,7 @@ EggPageCorner.Parent = EggPageBtn
 EggMainFrame = Instance.new("Frame")
 EggMainFrame.Name = "EggMainFrame"
 EggMainFrame.Size = UDim2.new(0, 320, 0, 450)
-EggMainFrame.Position = UDim2.new(0.5, -160, 0.5, -225)
+EggMainFrame.Position = UDim2.new(0.5, -160, 0.5, 140)
 EggMainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 EggMainFrame.BorderSizePixel = 0
 EggMainFrame.ClipsDescendants = true
