@@ -778,24 +778,16 @@ local function findTargetEgg()
     return nil
 end
 
-local function waitForEggTaken(egg, timeout)
-    -- Confirm the pickup state first. We do NOT return to Base merely because
-    -- the prompt was triggered. The Egg must actually leave RenderedEggs and
-    -- remain gone for a short settle window.
-    local deadline = os.clock() + (timeout or 4)
-
-    while os.clock() < deadline do
-        if not autoSteal then
-            return false
-        end
-
+local function waitForEggTaken(egg)
+    -- HARD CONFIRM GATE: never time out and never pause Auto Steal here.
+    -- After Steal is triggered, stay with this Egg until the game actually
+    -- removes/reparents it out of RenderedEggs and the state settles.
+    -- This prevents returning to Base before the pickup is confirmed.
+    while autoSteal do
         local removed = (not egg) or (not egg.Parent) or (not RenderedEggs)
             or (not egg:IsDescendantOf(RenderedEggs))
 
         if removed then
-            -- Fast confirmation: give the game a tiny replication window, then
-            -- verify the Egg is still gone. This avoids returning before the
-            -- pickup state has settled while keeping pickup response fast.
             task.wait(0.08)
 
             local stillGone = (not egg) or (not egg.Parent) or (not RenderedEggs)
@@ -879,7 +871,7 @@ local function stealOneEgg(egg)
         end
 
         -- Wait for the normal Egg removal/reparent signal first.
-        success = waitForEggTaken(egg, 4)
+        success = waitForEggTaken(egg)
         releaseEggLock()
 
         -- IMPORTANT: A triggered prompt is NOT proof that the Egg was taken.
@@ -892,21 +884,20 @@ local function stealOneEgg(egg)
             if returned then
                 task.wait(1)
             else
-                -- Hard gate: do not continue to another Egg if Return failed.
-                autoSteal = false
-                AutoStealBtn.Text = "Auto Steal | PAUSED"
-                AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
-                setMovementLocked(false)
-                warn("[OLIVER] Return failed; Auto Steal paused to prevent repeated Steal")
+                -- Do not start another Egg. Keep Auto Steal ON and retry the
+                -- captured Return Base until the character is actually back.
+                warn("[OLIVER] Return failed; waiting until Return Base succeeds")
+                while autoSteal and not returnAfterSuccess() do
+                    task.wait(0.1)
+                end
+                if autoSteal then
+                    task.wait(1)
+                end
             end
         else
-            -- Hard stop: do not retry the same Egg in a tight loop and do not
-            -- return to Base until the pickup is actually observed.
-            warn("[OLIVER] Egg was NOT confirmed taken after 6s; Auto Steal paused")
-            autoSteal = false
-            AutoStealBtn.Text = "Auto Steal | PAUSED"
-            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
-            setMovementLocked(false)
+            -- Auto Steal was turned OFF while waiting for confirmation.
+            -- Do not return to Base or start another Egg.
+            warn("[OLIVER] Auto Steal turned off before Egg pickup was confirmed")
         end
     end
 
