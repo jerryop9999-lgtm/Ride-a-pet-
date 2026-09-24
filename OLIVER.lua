@@ -6,9 +6,12 @@ local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 
+-- Ride A Pet: Eggs are rendered under Workspace.RenderedEggs
+local RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+
 -- 1. ScreenGui Setup
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OliverHubUI_Fixed"
+ScreenGui.Name = "OliverHubUI_EggDistance"
 ScreenGui.ResetOnSpawn = false
 
 if gethui then
@@ -140,6 +143,16 @@ end
 
 -- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
 local function isValidEgg(obj)
+    -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
+    if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
+        return false
+    end
+
+    -- Only track the actual egg Model, not its Handle/BillboardGui children.
+    if not obj:IsA("Model") then
+        return false
+    end
+
     -- ១. រំលងប្រសិនបើវាជាផ្នែកមួយនៃ Player Character ឬ Pet ដែលកំពុងជិះ
     local modelAncestor = obj:FindFirstAncestorOfClass("Model")
     if modelAncestor and Players:GetPlayerFromCharacter(modelAncestor) then
@@ -170,7 +183,17 @@ local function createESPForObject(obj)
     if not isEspEgg then return end
     if activeESP[obj] or not isValidEgg(obj) then return end
 
-    local primaryPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
+    local primaryPart
+    if obj:IsA("Model") then
+        -- Exact Ride A Pet structure uses Handle for the egg's world position.
+        primaryPart = obj:FindFirstChild("Handle")
+            or obj.PrimaryPart
+            or obj:FindFirstChildWhichIsA("BasePart", true)
+    elseif obj:IsA("BasePart") then
+        primaryPart = obj
+    else
+        return
+    end
     if not primaryPart then return end
 
     -- 1. Highlight
@@ -215,57 +238,126 @@ local function applyESP()
     removeESP()
     if not isEspEgg then return end
 
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        createESPForObject(obj)
+    -- Scan only the game's actual egg container.
+    -- This avoids unrelated BillboardGuis/objects elsewhere in Workspace.
+    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+
+    if RenderedEggs then
+        for _, obj in ipairs(RenderedEggs:GetChildren()) do
+            createESPForObject(obj)
+        end
+
+        -- Catch newly spawned eggs immediately.
+        addedConnection = RenderedEggs.ChildAdded:Connect(function(obj)
+            if not isEspEgg then return end
+
+            task.spawn(function()
+                for _ = 1, 8 do
+                    if not isEspEgg then return end
+
+                    createESPForObject(obj)
+
+                    if activeESP[obj] then
+                        return
+                    end
+
+                    task.wait(0.1)
+                end
+            end)
+        end)
+    else
+        -- Folder may be created after the script starts.
+        addedConnection = Workspace.ChildAdded:Connect(function(obj)
+            if obj.Name ~= "RenderedEggs" then return end
+            RenderedEggs = obj
+
+            if not isEspEgg then return end
+
+            for _, egg in ipairs(RenderedEggs:GetChildren()) do
+                createESPForObject(egg)
+            end
+
+            if addedConnection then
+                addedConnection:Disconnect()
+            end
+
+            addedConnection = RenderedEggs.ChildAdded:Connect(function(egg)
+                if isEspEgg then
+                    task.wait(0.1)
+                    createESPForObject(egg)
+                end
+            end)
+        end)
     end
 
-    -- ចាប់ Egg ដែល Spawn ថ្មីៗ
-    -- ពេល Model មកដល់មុន Parts ខាងក្នុង យើង retry បន្តិច ដើម្បីឲ្យ
-    -- PrimaryPart / BasePart មានរួចសិន។
-    addedConnection = Workspace.DescendantAdded:Connect(function(obj)
-        if not isEspEgg then return end
+    -- ==================== REAL-TIME DISTANCE ====================
+    -- ប្រើ GetPivot() សម្រាប់ Model ដើម្បីកុំឲ្យ distance នៅ [0m]
+    -- ប្រសិនបើ Egg មិនមាន PrimaryPart ឬ Character ទើប spawn មិនទាន់រួច។
+    local function getWorldPosition(instance)
+        if not instance or not instance.Parent then
+            return nil
+        end
 
-        task.spawn(function()
-            for _ = 1, 5 do
-                if not isEspEgg then return end
+        if instance:IsA("BasePart") then
+            return instance.Position
+        end
 
-                createESPForObject(obj)
-
-                -- បើ obj ជា Part ខាងក្នុងរបស់ Egg Model
-                -- សាកល្បង Parent Model ផង ដើម្បីចាប់ Egg បានត្រឹមត្រូវ។
-                local parentModel = obj:FindFirstAncestorOfClass("Model")
-                if parentModel then
-                    createESPForObject(parentModel)
-                end
-
-                if activeESP[obj] or (parentModel and activeESP[parentModel]) then
-                    return
-                end
-
-                task.wait(0.15)
+        if instance:IsA("Model") then
+            -- Ride A Pet egg structure: <Egg Model>.Handle
+            local handle = instance:FindFirstChild("Handle")
+            if handle and handle:IsA("BasePart") then
+                return handle.Position
             end
-        end)
-    end)
+
+            local ok, pivot = pcall(function()
+                return instance:GetPivot()
+            end)
+
+            if ok and pivot then
+                return pivot.Position
+            end
+        end
+
+        return nil
+    end
 
     updateConnection = RunService.RenderStepped:Connect(function()
         local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local playerPos = getWorldPosition(char)
 
         for obj, data in pairs(activeESP) do
             if not obj or not obj.Parent then
                 if data.Highlight then data.Highlight:Destroy() end
                 if data.Billboard then data.Billboard:Destroy() end
                 activeESP[obj] = nil
-            elseif root and data.Part and data.Part.Parent then
-                local dist = math.floor((root.Position - data.Part.Position).Magnitude)
-                data.TextLabel.Text = string.format("🥚 %s [%dm]", obj.Name, dist)
-            elseif obj and obj.Parent then
-                -- Part ចាស់អាចត្រូវបានលុបពេល Egg ផ្លាស់ប្តូរ/Spawn រួច
-                -- បង្កើត ESP ម្តងទៀតដោយស្វ័យប្រវត្តិ។
-                activeESP[obj] = nil
-                if data.Highlight then data.Highlight:Destroy() end
-                if data.Billboard then data.Billboard:Destroy() end
-                createESPForObject(obj)
+            else
+                -- យកទីតាំងពី Egg Model ផ្ទាល់ជាមុន
+                local eggPos = getWorldPosition(obj)
+
+                -- Fallback ទៅ Part ដែលបានរកឃើញពេលបង្កើត ESP
+                if not eggPos then
+                    eggPos = getWorldPosition(data.Part)
+                end
+
+                if playerPos and eggPos then
+                    local dist = math.floor((playerPos - eggPos).Magnitude + 0.5)
+                    data.TextLabel.Text = string.format(
+                        "🥚 %s [%dm]",
+                        obj.Name,
+                        dist
+                    )
+                elseif data.Part and data.Part.Parent then
+                    -- Part អាចមានតែបន្ទាប់ពី Model spawn រួច
+                    local partPos = getWorldPosition(data.Part)
+                    if playerPos and partPos then
+                        local dist = math.floor((playerPos - partPos).Magnitude + 0.5)
+                        data.TextLabel.Text = string.format(
+                            "🥚 %s [%dm]",
+                            obj.Name,
+                            dist
+                        )
+                    end
+                end
             end
         end
     end)
