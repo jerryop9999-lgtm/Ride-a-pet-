@@ -6,9 +6,9 @@ local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 
--- 1. ScreenGui Setup (ការពារពីការ Detect)
+-- 1. ScreenGui Setup
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OliverHubUI_V2"
+ScreenGui.Name = "OliverHubUI_Fixed"
 ScreenGui.ResetOnSpawn = false
 
 if gethui then
@@ -20,7 +20,7 @@ else
     ScreenGui.Parent = CoreGui
 end
 
--- 2. មុខងារ Drag (អូស Frame/Button បានលើ PC & Mobile)
+-- 2. មុខងារ Drag (អូស Frame/Button)
 local function makeDraggable(gui)
     local dragging = false
     local dragInput, dragStart, startPos
@@ -53,7 +53,7 @@ local function makeDraggable(gui)
     end)
 end
 
--- 3. Button បិទ/បើក Main Frame (អូសបាន)
+-- 3. Button បិទ/បើក Main Frame
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Name = "ToggleMenuBtn"
 ToggleBtn.Size = UDim2.new(0, 90, 0, 38)
@@ -69,9 +69,9 @@ local ToggleCorner = Instance.new("UICorner")
 ToggleCorner.CornerRadius = UDim.new(0, 8)
 ToggleCorner.Parent = ToggleBtn
 
-makeDraggable(ToggleBtn) -- អនុញ្ញាតឱ្យអូស Toggle Button
+makeDraggable(ToggleBtn)
 
--- 4. Main Frame (អូសបាន)
+-- 4. Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 260, 0, 150)
@@ -90,7 +90,7 @@ MainStroke.Color = Color3.fromRGB(0, 200, 255)
 MainStroke.Thickness = 1.5
 MainStroke.Parent = MainFrame
 
-makeDraggable(MainFrame) -- អនុញ្ញាតឱ្យអូស Main Frame
+makeDraggable(MainFrame)
 
 -- Header Title
 local TitleLabel = Instance.new("TextLabel")
@@ -102,7 +102,6 @@ TitleLabel.TextSize = 20
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Parent = MainFrame
 
--- Click Event បិទបើក Frame
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
@@ -122,7 +121,7 @@ local BtnCorner = Instance.new("UICorner")
 BtnCorner.CornerRadius = UDim.new(0, 8)
 BtnCorner.Parent = EspEggBtn
 
--- ==================== ADVANCED ESP SYSTEM ====================
+-- ==================== ADVANCED & CLEAN ESP SYSTEM ====================
 local isEspEgg = false
 local activeESP = {}
 local updateConnection
@@ -139,63 +138,87 @@ local function removeESP()
     if addedConnection then addedConnection:Disconnect() addedConnection = nil end
 end
 
+-- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
+local function isValidEgg(obj)
+    -- ១. រំលងប្រសិនបើវាជាផ្នែកមួយនៃ Player Character ឬ Pet ដែលកំពុងជិះ
+    local modelAncestor = obj:FindFirstAncestorOfClass("Model")
+    if modelAncestor and Players:GetPlayerFromCharacter(modelAncestor) then
+        return false
+    end
+
+    local nameLower = obj.Name:lower()
+
+    -- ២. រំលងពាក្យបច្ចេកទេសដែលមិនមែនជា Egg (ដូចជា EggSpawn, EggBase, Spawn -ល-)
+    if nameLower:find("spawn") or nameLower:find("base") or nameLower:find("holder") or nameLower:find("zone") then
+        return false
+    end
+
+    -- ៣. ត្រូវតែមានពាក្យ "egg" ក្នុងឈ្មោះ
+    if not nameLower:find("egg") then
+        return false
+    end
+
+    -- ៤. ការពារឈ្មោះជាន់គ្នា៖ បើវាជា Part ធម្មតា ហើយ Parent Model វាមានឈ្មោះ Egg ស្រាប់ -> យកតែ Parent Model
+    if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and obj.Parent.Name:lower():find("egg") then
+        return false
+    end
+
+    return true
+end
+
 local function createESPForObject(obj)
     if not isEspEgg then return end
-    if activeESP[obj] then return end
+    if activeESP[obj] or not isValidEgg(obj) then return end
 
-    if (obj:IsA("Model") or obj:IsA("BasePart")) and string.find(obj.Name:lower(), "egg") then
-        local primaryPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
-        if not primaryPart then return end
+    local primaryPart = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
+    if not primaryPart then return end
 
-        -- Highlight Effect
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "Oliver_EggHighlight"
-        highlight.Adornee = obj
-        highlight.FillColor = Color3.fromRGB(255, 170, 0)
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-        highlight.FillTransparency = 0.4
-        highlight.OutlineTransparency = 0
-        highlight.Parent = obj
+    -- 1. Highlight
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Oliver_EggHighlight"
+    highlight.Adornee = obj
+    highlight.FillColor = Color3.fromRGB(255, 170, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Parent = obj
 
-        -- Billboard Label
-        local billboard = Instance.new("BillboardGui")
-        billboard.Name = "Oliver_EggName"
-        billboard.Adornee = primaryPart
-        billboard.Size = UDim2.new(0, 200, 0, 40)
-        billboard.StudsOffset = Vector3.new(0, 3.5, 0)
-        billboard.AlwaysOnTop = true
-        billboard.Parent = obj
+    -- 2. Billboard Label (ចេញតែ ១ គត់)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Oliver_EggName"
+    billboard.Adornee = primaryPart
+    billboard.Size = UDim2.new(0, 200, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = obj
 
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.Text = "🥚 " .. obj.Name .. " [0m]"
-        textLabel.TextColor3 = Color3.fromRGB(255, 220, 50)
-        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        textLabel.TextStrokeTransparency = 0
-        textLabel.Font = Enum.Font.SourceSansBold
-        textLabel.TextSize = 14
-        textLabel.BackgroundTransparency = 1
-        textLabel.Parent = billboard
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.Text = "🥚 " .. obj.Name .. " [0m]"
+    textLabel.TextColor3 = Color3.fromRGB(255, 220, 50)
+    textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    textLabel.TextStrokeTransparency = 0
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextSize = 14
+    textLabel.BackgroundTransparency = 1
+    textLabel.Parent = billboard
 
-        activeESP[obj] = {
-            Highlight = highlight,
-            Billboard = billboard,
-            TextLabel = textLabel,
-            Part = primaryPart
-        }
-    end
+    activeESP[obj] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        TextLabel = textLabel,
+        Part = primaryPart
+    }
 end
 
 local function applyESP()
     removeESP()
     if not isEspEgg then return end
 
-    -- រកមើល Eggs ទាំងអស់ក្នុង Map
     for _, obj in ipairs(Workspace:GetDescendants()) do
         createESPForObject(obj)
     end
 
-    -- Auto Detect ពេលមាន Egg ថ្មីកើតឡើងក្នុង Map
     addedConnection = Workspace.DescendantAdded:Connect(function(obj)
         task.wait(0.1)
         if isEspEgg then
@@ -203,7 +226,6 @@ local function applyESP()
         end
     end)
 
-    -- Update Distance [m] រៀងរាល់ Frame
     updateConnection = RunService.RenderStepped:Connect(function()
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -221,7 +243,6 @@ local function applyESP()
     end)
 end
 
--- Button Trigger
 EspEggBtn.MouseButton1Click:Connect(function()
     isEspEgg = not isEspEgg
     if isEspEgg then
