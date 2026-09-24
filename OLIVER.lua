@@ -64,7 +64,7 @@ ToggleBtn.Name = "OLIVER"
 ToggleBtn.Size = UDim2.new(0, 90, 0, 38)
 ToggleBtn.Position = UDim2.new(0, 15, 0.35, 0)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-ToggleBtn.Text = "Open Panel | OFF"
+ToggleBtn.Text = "OLIVER"
 ToggleBtn.TextColor3 = Color3.fromRGB(0, 230, 255)
 ToggleBtn.Font = Enum.Font.SourceSansBold
 ToggleBtn.TextSize = 15
@@ -125,9 +125,9 @@ MainScroll.Parent = MainFrame
 ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
     if MainFrame.Visible then
-        ToggleBtn.Text = "Open Panel | ON"
+        ToggleBtn.Text = "OLIVER"
     else
-        ToggleBtn.Text = "Open Panel | OFF"
+        ToggleBtn.Text = "OLIVER"
     end
 end)
 
