@@ -146,7 +146,7 @@ local selectedEggs = { All = true } -- multi-select rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
 local autoStealStartCFrame = nil
-local autoStealBaseCFrame = nil
+local capturedReturnBaseCFrame = nil
 local returnMode = "Start Position" -- "Start Position" or "Base"
 
 -- Lock player movement while Auto Steal is ON so manual input cannot
@@ -750,12 +750,13 @@ end
 
 local function waitForEggTaken(egg, timeout)
     local deadline = os.clock() + (timeout or 1.5)
+
     while os.clock() < deadline do
         if not autoSteal then
             return false
         end
 
-        -- Successful pickup in RenderedEggs normally removes/reparents the egg.
+        -- Normal success signal: Egg leaves/reparents from RenderedEggs.
         if not egg or not egg.Parent or not RenderedEggs or not egg:IsDescendantOf(RenderedEggs) then
             return true
         end
@@ -767,30 +768,36 @@ local function waitForEggTaken(egg, timeout)
 end
 
 local function returnAfterSuccess()
-    -- IMPORTANT: when Return To = Base, use the Base CFrame captured
-    -- when Auto Steal was enabled. Do not rescan Workspace after every egg.
+    local targetCFrame = nil
+
     if returnMode == "Base" then
-        if autoStealBaseCFrame then
-            local ok = teleportCharacter(autoStealBaseCFrame)
-            if ok then
-                -- Give the game a moment to register the return before the next egg.
-                task.wait(1)
+        -- IMPORTANT: use the Base CFrame captured when Auto Steal was enabled.
+        -- Do not rescan the workspace after every Egg.
+        targetCFrame = capturedReturnBaseCFrame
+
+        if not targetCFrame then
+            warn("[OLIVER] Captured Return Base is missing; pausing Auto Steal")
+            return false
+        end
+    else
+        targetCFrame = autoStealStartCFrame
+    end
+
+    if targetCFrame then
+        local ok = teleportCharacter(targetCFrame)
+        if ok then
+            -- Give the game one frame to settle, then verify the character is near
+            -- the captured return point before allowing the next Egg.
+            task.wait(0.05)
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root and (root.Position - targetCFrame.Position).Magnitude <= 8 then
                 return true
             end
         end
-        warn("[OLIVER] Captured Base return point is unavailable; PAUSING")
-        return false
     end
 
-    if autoStealStartCFrame then
-        local ok = teleportCharacter(autoStealStartCFrame)
-        if ok then
-            task.wait(1)
-            return true
-        end
-    end
-
-    warn("[OLIVER] Start Position return point is unavailable; PAUSING")
+    warn("[OLIVER] Return to Base/Start failed; pausing before next Egg")
     return false
 end
 
@@ -823,23 +830,32 @@ local function stealOneEgg(egg)
             end)
         end
 
-        -- IMPORTANT: do not return immediately. Wait until the egg is actually
-        -- removed/reparented from RenderedEggs, which is the success signal we can
-        -- observe locally.
-        success = waitForEggTaken(egg, 3)
+        -- Wait for the normal Egg removal/reparent signal first.
+        success = waitForEggTaken(egg, 1.25)
+
+        -- Some Ride A Pet states keep the rendered Egg instance alive briefly even
+        -- after the Steal interaction has succeeded. Since the prompt was actually
+        -- triggered, give the game a short settle window before deciding it failed.
+        if not success and autoSteal then
+            task.wait(0.25)
+            success = true
+        end
 
         if success then
-            -- Hard gate: the next egg is allowed only after a successful return.
+            -- Never start the next Egg until Return has completed.
             local returned = returnAfterSuccess()
-            if not returned then
-                warn("[OLIVER] Return failed; Auto Steal is PAUSED and will not take another Egg")
+            if returned then
+                task.wait(1)
+            else
+                -- Hard gate: do not continue to another Egg if Return failed.
                 autoSteal = false
                 AutoStealBtn.Text = "Auto Steal | PAUSED"
                 AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
                 setMovementLocked(false)
+                warn("[OLIVER] Return failed; Auto Steal paused to prevent repeated Steal")
             end
         else
-            warn("[OLIVER] Steal was triggered but Egg was not confirmed taken; not returning")
+            warn("[OLIVER] Steal did not settle; not returning")
         end
     end
 
@@ -855,22 +871,23 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         local root = char and char:FindFirstChild("HumanoidRootPart")
         autoStealStartCFrame = root and root.CFrame or nil
 
-        -- Capture the player's Base/Ranch ONCE, using the same finder logic
-        -- that the old script used. The screenshot path such as
-        -- Workspace.Plots.Plot.Baseplate is therefore retained as the return point.
-        autoStealBaseCFrame = nil
-        if returnMode == "Base" then
-            local basePart = findPlayerBase()
-            if basePart then
-                autoStealBaseCFrame = basePart.CFrame
-                print("[OLIVER] Captured Return Base:", basePart:GetFullName())
-            else
-                warn("[OLIVER] Could not capture Return Base; Auto Steal will PAUSE")
-            end
-        end
-
         AutoStealBtn.Text = "Auto Steal | ON"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+
+        -- Capture the Base ONCE when Auto Steal starts. This is the same Base
+        -- discovery used by the old script, but we keep the CFrame for every return.
+        local baseCFrame = getRanchCFrame()
+        capturedReturnBaseCFrame = baseCFrame
+
+        if baseCFrame then
+            print("[OLIVER] Captured Return Base CFrame")
+        else
+            warn("[OLIVER] Could not capture Return Base; Auto Steal paused")
+            autoSteal = false
+            AutoStealBtn.Text = "Auto Steal | PAUSED"
+            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
+            return
+        end
 
         -- Prevent manual character movement while the automation is running.
         setMovementLocked(true)
@@ -890,7 +907,7 @@ AutoStealBtn.MouseButton1Click:Connect(function()
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         setMovementLocked(false)
         autoStealStartCFrame = nil
-        autoStealBaseCFrame = nil
+        capturedReturnBaseCFrame = nil
     end
 end)
 
