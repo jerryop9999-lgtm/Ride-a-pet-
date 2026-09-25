@@ -245,6 +245,7 @@ HoldLabel.TextSize = 14
 HoldLabel.TextXAlignment = Enum.TextXAlignment.Left
 HoldLabel.Parent = Content
 
+local OrderBtn = makeMainButton("EggOrder", "Egg Order • 22", 84, 43)
 
 local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 133, 43)
 
@@ -262,41 +263,9 @@ Info.Parent = Content
 
 makeDraggable(MainFrame, Header)
 
-do
-    local dragging = false
-    local moved = false
-    local startPos, startBtnPos
-    local activeInput
-
-    ToggleBtn.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.Touch
-            and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-        activeInput = input
-        dragging = true
-        moved = false
-        startPos = input.Position
-        startBtnPos = ToggleBtn.Position
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging or input ~= activeInput then return end
-        local delta = input.Position - startPos
-        if math.abs(delta.X) > 8 or math.abs(delta.Y) > 8 then moved = true end
-        if moved then
-            ToggleBtn.Position = UDim2.new(
-                startBtnPos.X.Scale, startBtnPos.X.Offset + delta.X,
-                startBtnPos.Y.Scale, startBtnPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input ~= activeInput then return end
-        dragging = false
-        activeInput = nil
-        if not moved then MainFrame.Visible = not MainFrame.Visible end
-    end)
-end
+connectTap(ToggleBtn, function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
 
 -- =========================================================
 -- SEPARATE EGG-IN-MAP PANEL
@@ -429,6 +398,88 @@ local EggRarity = {
     ["Black Hole Egg"] = "Ethereal",
     ["Cherub Egg"] = "Ethereal",
 }
+
+-- =========================================================
+-- EGG ORDER PANEL
+-- =========================================================
+
+local OrderFrame = Instance.new("Frame")
+OrderFrame.Name = "EggOrderPanel"
+OrderFrame.Size = UDim2.new(0, 225, 0, 335)
+OrderFrame.Position = UDim2.new(0.5, -112, 0.5, -167)
+OrderFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
+OrderFrame.BorderSizePixel = 0
+OrderFrame.Visible = false
+OrderFrame.Parent = ScreenGui
+
+local orderCorner = Instance.new("UICorner")
+orderCorner.CornerRadius = UDim.new(0, 13)
+orderCorner.Parent = OrderFrame
+
+local orderStroke = Instance.new("UIStroke")
+orderStroke.Thickness = 1.1
+orderStroke.Color = Color3.fromRGB(55, 155, 255)
+orderStroke.Parent = OrderFrame
+
+local OrderHeader = Instance.new("Frame")
+OrderHeader.Size = UDim2.new(1, 0, 0, 43)
+OrderHeader.BackgroundColor3 = Color3.fromRGB(24, 27, 38)
+OrderHeader.BorderSizePixel = 0
+OrderHeader.Parent = OrderFrame
+
+local orderHeaderCorner = Instance.new("UICorner")
+orderHeaderCorner.CornerRadius = UDim.new(0, 13)
+orderHeaderCorner.Parent = OrderHeader
+
+local OrderTitle = Instance.new("TextLabel")
+OrderTitle.BackgroundTransparency = 1
+OrderTitle.Size = UDim2.new(1, -16, 1, 0)
+OrderTitle.Position = UDim2.new(0, 9, 0, 0)
+OrderTitle.Text = "Egg Order • 22"
+OrderTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+OrderTitle.Font = Enum.Font.SourceSansBold
+OrderTitle.TextSize = 17
+OrderTitle.TextXAlignment = Enum.TextXAlignment.Left
+OrderTitle.Parent = OrderHeader
+
+local OrderScroll = Instance.new("ScrollingFrame")
+OrderScroll.Size = UDim2.new(1, -12, 1, -50)
+OrderScroll.Position = UDim2.new(0, 6, 0, 47)
+OrderScroll.BackgroundTransparency = 1
+OrderScroll.BorderSizePixel = 0
+OrderScroll.ScrollBarThickness = 4
+OrderScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+OrderScroll.Parent = OrderFrame
+
+local orderLayout = Instance.new("UIListLayout")
+orderLayout.SortOrder = Enum.SortOrder.LayoutOrder
+orderLayout.Padding = UDim.new(0, 2)
+orderLayout.Parent = OrderScroll
+
+for index, eggName in ipairs(EggPriority) do
+    local row = Instance.new("TextLabel")
+    row.Size = UDim2.new(1, -4, 0, 26)
+    row.LayoutOrder = index
+    row.BackgroundColor3 = Color3.fromRGB(31, 34, 45)
+    row.TextColor3 = Color3.fromRGB(235, 238, 245)
+    row.Font = Enum.Font.SourceSans
+    row.TextSize = 13
+    row.TextXAlignment = Enum.TextXAlignment.Left
+    row.Text = string.format("%02d   %s", index, eggName)
+    row.Parent = OrderScroll
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = row
+end
+
+OrderScroll.CanvasSize = UDim2.new(0, 0, 0, #EggPriority * 28)
+
+makeDraggable(OrderFrame, OrderHeader)
+
+connectTap(OrderBtn, function()
+    OrderFrame.Visible = not OrderFrame.Visible
+end)
 
 connectTap(MapPanelBtn, function()
     MapFrame.Visible = not MapFrame.Visible
@@ -660,40 +711,60 @@ end
 local function getStealPrompt(egg)
     if not egg then return nil end
 
-    -- Fast path: prioritize the actual in-game action shown on the Egg
-    -- ("Pick Up"), then fall back to any ProximityPrompt.
-    for _, x in ipairs(egg:GetChildren()) do
+    -- Prefer the real in-game pickup prompt. The Egg UI normally shows
+    -- ActionText = "Pick Up", so do not depend on the prompt Instance name.
+    local candidates = {}
+
+    for _, x in ipairs(egg:GetDescendants()) do
         if x:IsA("ProximityPrompt") then
-            local action = tostring(x.ActionText or ""):lower()
-            local object = tostring(x.ObjectText or ""):lower()
-            local name = x.Name:lower()
-            if action:find("pick up", 1, true) or action:find("pickup", 1, true)
-                or object:find("egg", 1, true) or name:find("steal", 1, true) then
-                return x
+            table.insert(candidates, x)
+        end
+    end
+
+    for _, x in ipairs(candidates) do
+        local action = tostring(x.ActionText or ""):lower()
+        if action:find("pick up", 1, true) or action:find("pickup", 1, true) then
+            return x
+        end
+    end
+
+    for _, x in ipairs(candidates) do
+        local objectText = tostring(x.ObjectText or ""):lower()
+        local name = tostring(x.Name or ""):lower()
+        if objectText:find("egg", 1, true) or name:find("steal", 1, true) then
+            return x
+        end
+    end
+
+    return candidates[1]
+end
+
+local function getPromptWorldPosition(prompt, fallbackPart)
+    if prompt then
+        local parent = prompt.Parent
+        if parent then
+            if parent:IsA("Attachment") then
+                return parent.WorldPosition
+            elseif parent:IsA("BasePart") then
+                return parent.Position
+            elseif parent:IsA("Model") then
+                local part = parent.PrimaryPart or parent:FindFirstChildWhichIsA("BasePart", true)
+                if part then return part.Position end
             end
         end
     end
 
-    for _, x in ipairs(egg:GetChildren()) do
-        if x:IsA("ProximityPrompt") then
-            return x
-        end
-    end
+    return fallbackPart and fallbackPart.Position or nil
+end
 
-    -- Only recurse inside the already-selected Egg model.
-    for _, x in ipairs(egg:GetDescendants()) do
-        if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
-            return x
-        end
+local function getPromptDistance(prompt, fallbackPart)
+    local pos = getPromptWorldPosition(prompt, fallbackPart)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if pos and root then
+        return (root.Position - pos).Magnitude
     end
-
-    for _, x in ipairs(egg:GetDescendants()) do
-        if x:IsA("ProximityPrompt") then
-            return x
-        end
-    end
-
-    return nil
+    return math.huge
 end
 
 local function teleportCharacter(cf, heightOffset)
@@ -740,9 +811,16 @@ local function lockToEgg(eggPart, heightOffset)
     end
 end
 
--- ==================== EGG ORDER PRIORITY ====================
--- Auto Steal uses the configured EggPriority order.
--- Player Hatch Luck is NOT used to choose the target Egg.
+-- ==================== EGG LUCK / HATCH LUCK PRIORITY ====================
+-- IMPORTANT:
+-- Ride A Pet has TWO different luck concepts:
+--   1) Egg Luck = the Luck value printed on each map Egg (30, 50, 1K, 1M, ...)
+--   2) Player Hatch Luck = the player's global Hatch Luck upgrade.
+-- Player Hatch Luck is the same modifier for all Eggs, so it cannot be used
+-- to rank Eggs against each other. Auto Steal therefore ranks by EGG LUCK.
+--
+-- The game can expose Egg Luck through attributes, ValueObjects, BillboardGui
+-- text, or only through the egg's known name. We check all of those paths.
 
 local function parseLuckNumber(value)
     if value == nil then return nil end
@@ -773,7 +851,7 @@ local function readLuckFromObject(obj)
 
     local names = {
         "Luck", "EggLuck", "Egg_Luck", "LuckValue",
-        "BaseLuck", "Base_Luck"
+        "BaseLuck", "Base_Luck", "Hatch_Luck"
     }
 
     for _, name in ipairs(names) do
@@ -791,7 +869,8 @@ local function readLuckFromObject(obj)
         if key == "luck"
             or key == "eggluck"
             or key == "luckvalue"
-            or key == "baseluck" then
+            or key == "baseluck"
+            or key == "hatchluck" then
 
             if d:IsA("StringValue") or d:IsA("IntValue") or d:IsA("NumberValue") then
                 local n = parseLuckNumber(d.Value)
@@ -968,31 +1047,27 @@ local function getEggByName(name)
 end
 
 local function findTargetEgg()
-    -- Highest live Egg Luck wins. Player Hatch Luck is never used.
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    -- ALWAYS choose the highest-Luck egg that is ACTUALLY in the map.
+    -- This does not depend on the order shown in the Egg Order panel.
+    local bestEgg = nil
+    local bestLuck = -1
+
+    if not RenderedEggs then
+        RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    end
     if not RenderedEggs then return nil end
 
-    local best, bestLuck = nil, -1
     for _, egg in ipairs(RenderedEggs:GetChildren()) do
         if isValidEgg(egg) then
             local luck = getEggLuck(egg)
-            if luck and luck > bestLuck then
-                best, bestLuck = egg, luck
+            if luck > bestLuck then
+                bestLuck = luck
+                bestEgg = egg
             end
         end
     end
-    if best then return best end
 
-    -- If live Luck is hidden, use the researched named ladder only as fallback.
-    for i = #EggPriority, 1, -1 do
-        local wanted = EggPriority[i]
-        for _, egg in ipairs(RenderedEggs:GetChildren()) do
-            if isValidEgg(egg) and egg.Name:lower() == wanted:lower() then
-                return egg
-            end
-        end
-    end
-    return nil
+    return bestEgg
 end
 
 
@@ -1073,8 +1148,45 @@ local function returnAfterSuccess()
     return teleportCharacter(targetCFrame, 2.5)
 end
 
-local function confirmEggTaken(egg)
-    while autoSteal do
+local function triggerStealPrompt(prompt)
+    if not prompt or not prompt.Parent then return false end
+
+    if not prompt.Enabled then
+        return false
+    end
+
+    -- Use the actual ProximityPrompt interaction. No mouse/virtual click.
+    -- Keep the real HoldDuration instead of forcing it to zero.
+    local hold = math.max(0, tonumber(prompt.HoldDuration) or 0)
+
+    local firePrompt = rawget(_G, "fireproximityprompt")
+    if type(firePrompt) == "function" then
+        local ok = pcall(function()
+            firePrompt(prompt)
+        end)
+        if ok then
+            return true
+        end
+    end
+
+    -- Roblox ProximityPrompt API fallback: begin/end the real prompt hold.
+    local ok = pcall(function()
+        prompt:InputHoldBegin()
+        if hold > 0 then
+            task.wait(hold + 0.05)
+        else
+            task.wait(0.05)
+        end
+        prompt:InputHoldEnd()
+    end)
+    return ok
+end
+
+local function confirmEggTaken(egg, timeout)
+    local started = os.clock()
+    local limit = timeout or 7
+
+    while autoSteal and (os.clock() - started) < limit do
         RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
 
         local gone = (not egg)
@@ -1083,7 +1195,7 @@ local function confirmEggTaken(egg)
             or (not egg:IsDescendantOf(RenderedEggs))
 
         if gone then
-            task.wait(0.06)
+            task.wait(0.08)
 
             RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
             local stillGone = (not egg)
@@ -1096,79 +1208,90 @@ local function confirmEggTaken(egg)
             end
         end
 
-        task.wait(0.03)
+        task.wait(0.04)
     end
 
     return false
 end
 
 local function stealOneEgg(egg)
-    if stealBusy or not autoSteal or not isValidEgg(egg) then return end
+    if stealBusy or not autoSteal or not egg then return end
     stealBusy = true
 
     local eggPart = getEggPart(egg)
     local prompt = getStealPrompt(egg)
-    if not eggPart or not prompt then
-        stealBusy = false
-        return
-    end
 
-    -- Move to the Egg. No mouse/touch Auto Click and no VirtualInput are used.
-    Status.Text = "GO EGG"
-    teleportCharacter(eggPart.CFrame, 0.75)
-    local releaseLock = lockToEgg(eggPart, 0.75)
-
-    -- Use the game's ProximityPrompt only. No click simulation or virtual input.
-    pcall(function()
-        prompt.HoldDuration = 0.0
-    end)
-
-    Status.Text = "PROMPT"
-
-    -- ACTIVATE ONLY THE EGG'S ProximityPrompt.
-    -- This is not a mouse/touch auto-click and does not use VirtualInput.
-    -- The screenshot shows the actual action is "Pick Up", so the prompt
-    -- must be fired after moving into range.
-    local triggered = false
-    pcall(function()
-        if typeof(fireproximityprompt) == "function" then
-            fireproximityprompt(prompt)
-            triggered = true
+    if eggPart and prompt then
+        -- Move directly to the Prompt's actual attachment/part, not just the
+        -- Egg model root. This makes the interaction behave like standing
+        -- beside the visible ProximityPrompt.
+        local promptPos = getPromptWorldPosition(prompt, eggPart)
+        if promptPos then
+            teleportCharacter(CFrame.new(promptPos), 1.5)
+        else
+            teleportCharacter(eggPart.CFrame, 1.5)
         end
-    end)
 
-    -- Executor fallback: use the ProximityPrompt hold API itself.
-    if not triggered then
-        pcall(function()
-            prompt:InputHoldBegin()
-            task.wait(math.max(0, tonumber(prompt.HoldDuration) or 0))
-            prompt:InputHoldEnd()
-            triggered = true
-        end)
-    end
+        local releaseLock = lockToEgg(eggPart, 1.5)
+        local success = false
 
-    -- CONFIRM FIRST: wait until the selected Egg is really gone.
-    -- Only after confirmation do we return to Base, like the earlier build.
-    Status.Text = "CONFIRM"
-    local taken = confirmEggTaken(egg)
+        -- Give Roblox a short moment to register that the character is now
+        -- inside the Prompt's activation distance.
+        task.wait(0.12)
 
-    releaseLock()
+        for attempt = 1, 3 do
+            if not autoSteal then break end
 
-    if taken and autoSteal then
-        Status.Text = "RETURN"
-        local returned = returnAfterSuccess()
-        if returned then task.wait(0.25) end
-        resetExpiredEggTarget()
-    else
-        -- Never return to Base unless the Egg was confirmed taken.
-        Status.Text = "WAIT"
-        resetExpiredEggTarget()
-        task.wait(0.35)
+            -- Refresh the prompt each attempt in case the Egg recreated it.
+            prompt = getStealPrompt(egg)
+            if not prompt then break end
+
+            local maxDistance = math.max(1, tonumber(prompt.MaxActivationDistance) or 10)
+            local distance = getPromptDistance(prompt, eggPart)
+
+            if distance > maxDistance + 2 then
+                local pos = getPromptWorldPosition(prompt, eggPart)
+                if pos then
+                    teleportCharacter(CFrame.new(pos), 1.5)
+                    task.wait(0.10)
+                end
+            end
+
+            Status.Text = "PROMPT"
+            local fired = triggerStealPrompt(prompt)
+
+            if fired and confirmEggTaken(egg, 2.5) then
+                success = true
+                break
+            end
+
+            task.wait(0.12)
+        end
+
+        releaseLock()
+
+        if success and autoSteal then
+            Status.Text = "RETURN"
+
+            -- Return only after the Egg has actually disappeared from
+            -- RenderedEggs, so a failed Prompt never sends us back early.
+            local returned = returnAfterSuccess()
+
+            if returned then
+                task.wait(0.25)
+            end
+
+            resetExpiredEggTarget()
+            task.wait(0.15)
+        else
+            Status.Text = "RETRY"
+            resetExpiredEggTarget()
+            task.wait(0.20)
+        end
     end
 
     stealBusy = false
 end
-
 
 local function stopAutoSteal()
     autoSteal = false
@@ -1300,16 +1423,16 @@ task.spawn(function()
     end
 end)
 
-print("[OLIVER] Mobile Auto Steal + ProximityPrompt | READY")
+print("[OLIVER] Fresh UI loaded | Best Egg Auto Steal | AUTO START")
 
 -- =========================================================
 -- STARTUP
 -- =========================================================
 
-AutoStealBtn.Text = "Auto Steal | OFF"
-AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+AutoStealBtn.Text = "Auto Steal | ON"
+AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 145, 90)
 HoldLabel.Text = "Hold 0.0s"
-Status.Text = "OFF"
+Status.Text = "AUTO BEST"
 Status.TextColor3 = Color3.fromRGB(0, 210, 255)
 MapPanelBtn.Text = "Egg in Map | OFF"
 MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
@@ -1317,3 +1440,37 @@ MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 -- All panels are independent. Main UI starts closed.
 MainFrame.Visible = false
 MapFrame.Visible = false
+OrderFrame.Visible = false
+
+
+-- AUTO START: no button press is required.
+-- It continuously selects the highest-Luck egg currently in RenderedEggs,
+-- steals it, returns to Base, then repeats.
+task.defer(function()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local root = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
+    autoStealStartCFrame = root and root.CFrame or nil
+    capturedReturnBaseCFrame = getRanchCFrame()
+
+    if not capturedReturnBaseCFrame then
+        Status.Text = "NO BASE"
+        Status.TextColor3 = Color3.fromRGB(220, 150, 40)
+        AutoStealBtn.Text = "Auto Steal | WAIT"
+        return
+    end
+
+    autoSteal = true
+    setMovementLocked(true)
+    setupEggSpawnWatchers()
+
+    task.spawn(function()
+        while autoSteal do
+            local egg = getCachedTargetEgg()
+            if egg then
+                stealOneEgg(egg)
+            else
+                task.wait(0.12)
+            end
+        end
+    end)
+end)
