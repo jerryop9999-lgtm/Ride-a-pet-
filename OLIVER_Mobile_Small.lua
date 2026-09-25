@@ -12,11 +12,9 @@
 ]]
 
 local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
@@ -76,14 +74,6 @@ local function makeDraggable(frame, handle)
             return
         end
 
-        -- Never steal a button tap.
-        local objects = GuiService:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
-        for _, obj in ipairs(objects) do
-            if obj:IsA("GuiButton") then
-                return
-            end
-        end
-
         dragging = true
         dragStart = input.Position
         startPos = frame.Position
@@ -124,39 +114,9 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.DisplayOrder = 999999
 
-local function getGuiParent()
-    if type(gethui) == "function" then
-        local ok, hui = pcall(gethui)
-        if ok and hui then
-            return hui
-        end
-    end
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-    if LocalPlayer then
-        local ok, playerGui = pcall(function()
-            return LocalPlayer:WaitForChild("PlayerGui", 5)
-        end)
-        if ok and playerGui then
-            return playerGui
-        end
-    end
-
-    return CoreGui
-end
-
-local _oliverParentOK = pcall(function()
-    ScreenGui.Parent = getGuiParent()
-end)
-
-if not _oliverParentOK then
-    warn("[OLIVER] GUI parent failed")
-end
-
-ScreenGui.DescendantAdded:Connect(function(obj)
-    if obj:IsA("GuiButton") then
-        setupTouchButton(obj)
-    end
-end)
+ScreenGui.Parent = PlayerGui
 
 -- Floating external button.
 local ToggleBtn = Instance.new("TextButton")
