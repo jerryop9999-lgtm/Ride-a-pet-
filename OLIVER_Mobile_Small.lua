@@ -124,13 +124,32 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.DisplayOrder = 999999
 
-if gethui then
-    ScreenGui.Parent = gethui()
-elseif syn and syn.protect_gui then
-    pcall(function() syn.protect_gui(ScreenGui) end)
-    ScreenGui.Parent = CoreGui
-else
-    ScreenGui.Parent = CoreGui
+local function getGuiParent()
+    if type(gethui) == "function" then
+        local ok, hui = pcall(gethui)
+        if ok and hui then
+            return hui
+        end
+    end
+
+    if LocalPlayer then
+        local ok, playerGui = pcall(function()
+            return LocalPlayer:WaitForChild("PlayerGui", 5)
+        end)
+        if ok and playerGui then
+            return playerGui
+        end
+    end
+
+    return CoreGui
+end
+
+local _oliverParentOK = pcall(function()
+    ScreenGui.Parent = getGuiParent()
+end)
+
+if not _oliverParentOK then
+    warn("[OLIVER] GUI parent failed")
 end
 
 ScreenGui.DescendantAdded:Connect(function(obj)
@@ -237,6 +256,14 @@ local stealBusy = false
 local autoStealStartCFrame = nil
 local capturedReturnBaseCFrame = nil
 local returnMode = "Base"
+
+local movementLock = {
+    controls = nil,
+    walkSpeed = nil,
+    jumpPower = nil,
+    jumpHeight = nil,
+    autoRotate = nil,
+}
 
 -- Hidden compatibility page used only as a state target by the filter menu.
 local EggPage = Instance.new("Frame")
@@ -1306,7 +1333,7 @@ local function disconnectEggSpawnWatchers()
             connection:Disconnect()
         end)
     end
-    table.clear(eggSpawnConnections)
+    eggSpawnConnections = {}
 end
 
 local function signalEggSpawn()
