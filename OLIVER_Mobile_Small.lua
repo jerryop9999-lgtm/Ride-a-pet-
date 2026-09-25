@@ -711,26 +711,23 @@ end
 local function getStealPrompt(egg)
     if not egg then return nil end
 
-    -- Fast path: most Eggs keep the prompt close to the model root.
-    for _, x in ipairs(egg:GetChildren()) do
-        if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
-            return x
-        end
+    -- Prefer the actual pickup prompt. Some builds call it Pick Up, others
+    -- use Steal/Grab, so inspect both the prompt name and ActionText.
+    local function isPickupPrompt(x)
+        if not x:IsA("ProximityPrompt") then return false end
+        local n = tostring(x.Name):lower()
+        local a = tostring(x.ActionText or ""):lower()
+        return n:find("pick") or n:find("steal") or n:find("grab")
+            or a:find("pick") or a:find("steal") or a:find("grab")
     end
 
-    for _, x in ipairs(egg:GetChildren()) do
-        if x:IsA("ProximityPrompt") then
-            return x
-        end
-    end
-
-    -- Only recurse inside the already-selected Egg model.
     for _, x in ipairs(egg:GetDescendants()) do
-        if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
+        if isPickupPrompt(x) then
             return x
         end
     end
 
+    -- Fallback: if the game uses an unnamed ProximityPrompt, use the first one.
     for _, x in ipairs(egg:GetDescendants()) do
         if x:IsA("ProximityPrompt") then
             return x
@@ -1124,34 +1121,62 @@ end
 local function triggerStealPrompt(prompt)
     if not prompt or not prompt.Parent then return false end
 
-    -- Auto-click/auto-hold: make the prompt instant before triggering it.
-    -- Roblox documents HoldDuration = 0 as immediate activation.
+    -- Make the pickup prompt immediately activatable. Roblox documents that
+    -- HoldDuration=0 triggers immediately. On mobile, ProximityPrompt also
+    -- supports direct touch interaction.
     pcall(function()
         prompt.Enabled = true
         prompt.HoldDuration = 0
+        prompt.ClickablePrompt = true
     end)
 
-    -- 1) Executor prompt trigger, when the executor exposes it.
+    local triggered = false
+
+    -- 1) Executor-native ProximityPrompt trigger. Try several compatible
+    -- signatures because Delta builds can expose slightly different wrappers.
     local firePrompt = nil
     pcall(function() firePrompt = fireproximityprompt end)
     if type(firePrompt) == "function" then
-        local ok = pcall(function()
-            firePrompt(prompt, 0, true)
-        end)
-        if ok then
-            return true
+        for _, args in ipairs({
+            {prompt},
+            {prompt, 0},
+            {prompt, 0, true},
+        }) do
+            local ok = pcall(function()
+                firePrompt(table.unpack(args))
+            end)
+            if ok then
+                triggered = true
+                task.wait(0.08)
+                break
+            end
         end
     end
 
-    -- 2) Native Roblox ProximityPrompt input path.
-    -- This is the same interaction path used by the prompt UI; no manual
-    -- phone tap is required after the character is moved into range.
-    local ok = pcall(function()
+    -- 2) Roblox's own prompt input path. This is the same begin/end path used
+    -- by the touch prompt UI and does not require the user to tap the screen.
+    pcall(function()
         prompt:InputHoldBegin()
-        task.wait(0.02)
+        task.wait(0.12)
         prompt:InputHoldEnd()
+        triggered = true
     end)
-    return ok
+
+    -- 3) If the executor exposes VirtualInputManager, also send the prompt's
+    -- configured keyboard key. This is useful when the game only accepts its
+    -- normal prompt input path even though the player is on a phone.
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        local key = prompt.KeyboardKeyCode
+        if vim and key and key ~= Enum.KeyCode.Unknown then
+            vim:SendKeyEvent(true, key, false, game)
+            task.wait(0.05)
+            vim:SendKeyEvent(false, key, false, game)
+            triggered = true
+        end
+    end)
+
+    return triggered
 end
 
 local function confirmEggTaken(egg)
