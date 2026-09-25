@@ -86,20 +86,21 @@ local function makeDraggable(gui)
             return
         end
 
-        -- Do not steal a tap from any Button / ScrollingFrame underneath.
-        local objects = game:GetService("GuiService"):GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
+        -- Only drag when touching the frame/header, never the buttons.
+        local objects = game:GetService("GuiService"):GetGuiObjectsAtPosition(
+            input.Position.X, input.Position.Y
+        )
+
         for _, obj in ipairs(objects) do
-            if obj:IsA("GuiButton") or obj:IsA("ScrollingFrame") then
+            if obj:IsA("GuiButton") then
                 return
-            end
-            if obj == gui then
-                break
             end
         end
 
         dragging = true
         dragStart = input.Position
         startPos = gui.Position
+        dragInput = input
 
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
@@ -117,9 +118,7 @@ local function makeDraggable(gui)
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if not dragging or input ~= dragInput then
-            return
-        end
+        if not dragging or input ~= dragInput then return end
 
         local delta = input.Position - dragStart
         gui.Position = UDim2.new(
@@ -237,10 +236,61 @@ LoopBtn.Position = UDim2.new(0.06, 0, 0, 64)
 styleButton(LoopBtn, "Loop | OFF")
 LoopBtn.Parent = MainScroll
 
--- Toggle Main Frame
-connectTap(ToggleBtn, function()
-    MainFrame.Visible = not MainFrame.Visible
-end)
+-- Mobile draggable OLIVER button + tap to open/close Main Frame.
+do
+    local dragging = false
+    local moved = false
+    local dragInput
+    local dragStart
+    local startPos
+
+    ToggleBtn.InputBegan:Connect(function(input)
+        if input.UserInputType ~= Enum.UserInputType.Touch
+            and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+            return
+        end
+
+        dragging = true
+        moved = false
+        dragInput = input
+        dragStart = input.Position
+        startPos = ToggleBtn.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+                dragInput = nil
+
+                if not moved then
+                    MainFrame.Visible = not MainFrame.Visible
+                end
+            end
+        end)
+    end)
+
+    ToggleBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging or input ~= dragInput then return end
+
+        local delta = input.Position - dragStart
+        if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
+            moved = true
+        end
+
+        ToggleBtn.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end)
+end
 
 -- ==================== AUTO STEAL ====================
 local autoSteal = false
