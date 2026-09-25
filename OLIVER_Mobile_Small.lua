@@ -784,16 +784,9 @@ local function lockToEgg(eggPart, heightOffset)
     end
 end
 
--- ==================== EGG LUCK / HATCH LUCK PRIORITY ====================
--- IMPORTANT:
--- Ride A Pet has TWO different luck concepts:
---   1) Egg Luck = the Luck value printed on each map Egg (30, 50, 1K, 1M, ...)
---   2) Player Hatch Luck = the player's global Hatch Luck upgrade.
--- Player Hatch Luck is the same modifier for all Eggs, so it cannot be used
--- to rank Eggs against each other. Auto Steal therefore ranks by EGG LUCK.
---
--- The game can expose Egg Luck through attributes, ValueObjects, BillboardGui
--- text, or only through the egg's known name. We check all of those paths.
+-- ==================== EGG ORDER PRIORITY ====================
+-- Auto Steal uses the configured EggPriority order.
+-- Player Hatch Luck is NOT used to choose the target Egg.
 
 local function parseLuckNumber(value)
     if value == nil then return nil end
@@ -1020,15 +1013,46 @@ local function getEggByName(name)
 end
 
 local function findTargetEgg()
-    -- STRICT ORDER: first available Egg in the 22-entry list wins.
+    -- Use the EggPriority order only.
+    -- No Hatch Luck is used here. The first Egg in the configured order
+    -- that is currently present in the map is always selected.
+    if not RenderedEggs then
+        RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+    end
+    if not RenderedEggs then return nil end
+
     for _, eggName in ipairs(EggPriority) do
-        local egg = getEggByName(eggName)
-        if egg then
-            return egg
+        local best = nil
+
+        for _, egg in ipairs(RenderedEggs:GetChildren()) do
+            if isValidEgg(egg) then
+                local sameName = egg.Name == eggName
+                    or egg.Name:lower() == eggName:lower()
+                if sameName then
+                    best = egg
+                    break
+                end
+            end
+        end
+
+        if best then
+            return best
         end
     end
 
-    return nil
+    -- Support live eggs whose current name differs from the researched list:
+    -- choose by the live Egg Luck value only as a fallback. Hatch Luck is never used.
+    local fallback, fallbackLuck = nil, -1
+    for _, egg in ipairs(RenderedEggs:GetChildren()) do
+        if isValidEgg(egg) then
+            local luck = getEggLuck(egg)
+            if luck > fallbackLuck then
+                fallbackLuck = luck
+                fallback = egg
+            end
+        end
+    end
+    return fallback
 end
 
 
@@ -1197,18 +1221,10 @@ local function stealOneEgg(egg)
                 task.wait(0.25)
             end
 
-            -- This requested version is ONE-EGG Auto Steal.
-            autoSteal = false
-            AutoStealBtn.Text = "Auto Steal | OFF"
-            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
-            Status.Text = "OFF"
-            Status.TextColor3 = Color3.fromRGB(150, 155, 165)
-
-            setMovementLocked(false)
-            disconnectEggSpawnWatchers()
+            -- Keep Auto Steal running. After returning to Base, the loop
+            -- immediately searches the map again and takes the best egg.
             resetExpiredEggTarget()
-            autoStealStartCFrame = nil
-            capturedReturnBaseCFrame = nil
+            task.wait(0.15)
         end
     end
 
@@ -1345,7 +1361,7 @@ task.spawn(function()
     end
 end)
 
-print("[OLIVER] Fresh UI loaded | 22-Egg priority | Auto Steal OFF")
+print("[OLIVER] Fresh UI loaded | Egg Order Auto Steal | READY")
 
 -- =========================================================
 -- STARTUP
@@ -1355,7 +1371,7 @@ AutoStealBtn.Text = "Auto Steal | OFF"
 AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 HoldLabel.Text = "Hold 0.0s"
 Status.Text = "OFF"
-Status.TextColor3 = Color3.fromRGB(150, 155, 165)
+Status.TextColor3 = Color3.fromRGB(0, 210, 255)
 MapPanelBtn.Text = "Egg in Map | OFF"
 MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 
