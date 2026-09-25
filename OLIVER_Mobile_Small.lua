@@ -155,7 +155,7 @@ toggleCorner.Parent = ToggleBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 238, 0, 285)
+MainFrame.Size = UDim2.new(0, 238, 0, 235)
 MainFrame.Position = UDim2.new(0.5, -119, 0.5, -142)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MainFrame.BorderSizePixel = 0
@@ -245,13 +245,11 @@ HoldLabel.TextSize = 14
 HoldLabel.TextXAlignment = Enum.TextXAlignment.Left
 HoldLabel.Parent = Content
 
-local OrderBtn = makeMainButton("EggOrder", "Egg Order • 22", 84, 43)
-
-local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 133, 43)
+local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 84, 43)
 
 local Info = Instance.new("TextLabel")
 Info.Size = UDim2.new(1, 0, 0, 42)
-Info.Position = UDim2.new(0, 0, 0, 181)
+Info.Position = UDim2.new(0, 0, 0, 133)
 Info.BackgroundTransparency = 1
 Info.Text = "Fast flight → Egg → confirm → Base"
 Info.TextColor3 = Color3.fromRGB(145, 150, 160)
@@ -263,7 +261,9 @@ Info.Parent = Content
 
 makeDraggable(MainFrame, Header)
 
-connectTap(ToggleBtn, function()
+-- Floating OLIVER button: one-finger draggable, tap/click toggles MainFrame.
+makeDraggable(ToggleBtn, ToggleBtn)
+ToggleBtn.Activated:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
@@ -398,88 +398,6 @@ local EggRarity = {
     ["Black Hole Egg"] = "Ethereal",
     ["Cherub Egg"] = "Ethereal",
 }
-
--- =========================================================
--- EGG ORDER PANEL
--- =========================================================
-
-local OrderFrame = Instance.new("Frame")
-OrderFrame.Name = "EggOrderPanel"
-OrderFrame.Size = UDim2.new(0, 225, 0, 335)
-OrderFrame.Position = UDim2.new(0.5, -112, 0.5, -167)
-OrderFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
-OrderFrame.BorderSizePixel = 0
-OrderFrame.Visible = false
-OrderFrame.Parent = ScreenGui
-
-local orderCorner = Instance.new("UICorner")
-orderCorner.CornerRadius = UDim.new(0, 13)
-orderCorner.Parent = OrderFrame
-
-local orderStroke = Instance.new("UIStroke")
-orderStroke.Thickness = 1.1
-orderStroke.Color = Color3.fromRGB(55, 155, 255)
-orderStroke.Parent = OrderFrame
-
-local OrderHeader = Instance.new("Frame")
-OrderHeader.Size = UDim2.new(1, 0, 0, 43)
-OrderHeader.BackgroundColor3 = Color3.fromRGB(24, 27, 38)
-OrderHeader.BorderSizePixel = 0
-OrderHeader.Parent = OrderFrame
-
-local orderHeaderCorner = Instance.new("UICorner")
-orderHeaderCorner.CornerRadius = UDim.new(0, 13)
-orderHeaderCorner.Parent = OrderHeader
-
-local OrderTitle = Instance.new("TextLabel")
-OrderTitle.BackgroundTransparency = 1
-OrderTitle.Size = UDim2.new(1, -16, 1, 0)
-OrderTitle.Position = UDim2.new(0, 9, 0, 0)
-OrderTitle.Text = "Egg Order • 22"
-OrderTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-OrderTitle.Font = Enum.Font.SourceSansBold
-OrderTitle.TextSize = 17
-OrderTitle.TextXAlignment = Enum.TextXAlignment.Left
-OrderTitle.Parent = OrderHeader
-
-local OrderScroll = Instance.new("ScrollingFrame")
-OrderScroll.Size = UDim2.new(1, -12, 1, -50)
-OrderScroll.Position = UDim2.new(0, 6, 0, 47)
-OrderScroll.BackgroundTransparency = 1
-OrderScroll.BorderSizePixel = 0
-OrderScroll.ScrollBarThickness = 4
-OrderScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-OrderScroll.Parent = OrderFrame
-
-local orderLayout = Instance.new("UIListLayout")
-orderLayout.SortOrder = Enum.SortOrder.LayoutOrder
-orderLayout.Padding = UDim.new(0, 2)
-orderLayout.Parent = OrderScroll
-
-for index, eggName in ipairs(EggPriority) do
-    local row = Instance.new("TextLabel")
-    row.Size = UDim2.new(1, -4, 0, 26)
-    row.LayoutOrder = index
-    row.BackgroundColor3 = Color3.fromRGB(31, 34, 45)
-    row.TextColor3 = Color3.fromRGB(235, 238, 245)
-    row.Font = Enum.Font.SourceSans
-    row.TextSize = 13
-    row.TextXAlignment = Enum.TextXAlignment.Left
-    row.Text = string.format("%02d   %s", index, eggName)
-    row.Parent = OrderScroll
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = row
-end
-
-OrderScroll.CanvasSize = UDim2.new(0, 0, 0, #EggPriority * 28)
-
-makeDraggable(OrderFrame, OrderHeader)
-
-connectTap(OrderBtn, function()
-    OrderFrame.Visible = not OrderFrame.Visible
-end)
 
 connectTap(MapPanelBtn, function()
     MapFrame.Visible = not MapFrame.Visible
@@ -1388,54 +1306,24 @@ task.spawn(function()
     end
 end)
 
-print("[OLIVER] Best-Egg Auto Steal | AUTO PICKUP | AUTO START")
+print("[OLIVER] Best-Egg Auto Steal | AUTO PICKUP | READY (OFF)")
 
 -- =========================================================
 -- STARTUP
 -- =========================================================
 
-AutoStealBtn.Text = "Auto Steal | ON"
-AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 145, 90)
+AutoStealBtn.Text = "Auto Steal | OFF"
+AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 HoldLabel.Text = "Hold 0.0s"
-Status.Text = "AUTO BEST"
-Status.TextColor3 = Color3.fromRGB(0, 210, 255)
+Status.Text = "OFF"
+Status.TextColor3 = Color3.fromRGB(150, 155, 165)
 MapPanelBtn.Text = "Egg in Map | OFF"
 MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 
 -- All panels are independent. Main UI starts closed.
 MainFrame.Visible = false
 MapFrame.Visible = false
-OrderFrame.Visible = false
 
+-- IMPORTANT: Auto Steal stays OFF after Run Script.
+-- It starts only when the user taps "Auto Steal | OFF".
 
--- AUTO START: no button press is required.
--- It continuously selects the highest-Luck egg currently in RenderedEggs,
--- steals it, returns to Base, then repeats.
-task.defer(function()
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local root = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
-    autoStealStartCFrame = root and root.CFrame or nil
-    capturedReturnBaseCFrame = getRanchCFrame()
-
-    if not capturedReturnBaseCFrame then
-        Status.Text = "NO BASE"
-        Status.TextColor3 = Color3.fromRGB(220, 150, 40)
-        AutoStealBtn.Text = "Auto Steal | WAIT"
-        return
-    end
-
-    autoSteal = true
-    setMovementLocked(true)
-    setupEggSpawnWatchers()
-
-    task.spawn(function()
-        while autoSteal do
-            local egg = getCachedTargetEgg()
-            if egg then
-                stealOneEgg(egg)
-            else
-                task.wait(0.12)
-            end
-        end
-    end)
-end)
