@@ -86,21 +86,20 @@ local function makeDraggable(gui)
             return
         end
 
-        -- Only drag when touching the frame/header, never the buttons.
-        local objects = game:GetService("GuiService"):GetGuiObjectsAtPosition(
-            input.Position.X, input.Position.Y
-        )
-
+        -- Do not steal a tap from any Button / ScrollingFrame underneath.
+        local objects = game:GetService("GuiService"):GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
         for _, obj in ipairs(objects) do
-            if obj:IsA("GuiButton") then
+            if obj:IsA("GuiButton") or obj:IsA("ScrollingFrame") then
                 return
+            end
+            if obj == gui then
+                break
             end
         end
 
         dragging = true
         dragStart = input.Position
         startPos = gui.Position
-        dragInput = input
 
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
@@ -118,7 +117,9 @@ local function makeDraggable(gui)
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if not dragging or input ~= dragInput then return end
+        if not dragging or input ~= dragInput then
+            return
+        end
 
         local delta = input.Position - dragStart
         gui.Position = UDim2.new(
@@ -129,114 +130,76 @@ local function makeDraggable(gui)
         )
     end)
 end
--- 3. NEW MOBILE UI
+-- 3. Button បិទ/បើក Main Frame
 local EggMainFrame
 
-local function styleButton(button, text)
-    setupTouchButton(button)
-    button.Active = true
-    button.Size = UDim2.new(0.88, 0, 0, 48)
-    button.BackgroundColor3 = Color3.fromRGB(38, 38, 52)
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Font = Enum.Font.SourceSansBold
-    button.TextSize = 16
-    button.AutoButtonColor = true
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = button
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(70, 70, 90)
-    stroke.Thickness = 1
-    stroke.Parent = button
-end
-
--- Floating button: open / close Main Frame
 local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Name = "OLIVER"
-ToggleBtn.Size = UDim2.new(0, 86, 0, 38)
-ToggleBtn.Position = UDim2.new(0, 14, 0.38, 0)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
-ToggleBtn.Text = "OLIVER"
-ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleBtn.Font = Enum.Font.SourceSansBold
-ToggleBtn.TextSize = 14
-ToggleBtn.AutoButtonColor = true
-ToggleBtn.Parent = ScreenGui
 setupTouchButton(ToggleBtn)
+ToggleBtn.Active = true
+ToggleBtn.Name = "OLIVER"
+ToggleBtn.Size = UDim2.new(0, 78, 0, 32)
+ToggleBtn.Position = UDim2.new(0, 15, 0.35, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+ToggleBtn.Text = "OLIVER"
+ToggleBtn.TextColor3 = Color3.fromRGB(0, 230, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 13
+ToggleBtn.Parent = ScreenGui
 
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 10)
-toggleCorner.Parent = ToggleBtn
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 8)
+ToggleCorner.Parent = ToggleBtn
 
-local toggleStroke = Instance.new("UIStroke")
-toggleStroke.Color = Color3.fromRGB(0, 200, 255)
-toggleStroke.Thickness = 1.3
-toggleStroke.Parent = ToggleBtn
+-- ToggleBtn is tap-only on mobile so one finger activates it reliably.
 
--- Main Frame
+-- 4. Main Frame
 local MainFrame = Instance.new("Frame")
+MainFrame.Active = true
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 220, 0, 190)
 MainFrame.Position = UDim2.new(0.5, -110, 0.5, -95)
-MainFrame.BackgroundColor3 = Color3.fromRGB(16, 16, 23)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 14)
-mainCorner.Parent = MainFrame
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
 
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Color3.fromRGB(0, 200, 255)
-mainStroke.Thickness = 1.4
-mainStroke.Parent = MainFrame
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(0, 200, 255)
+MainStroke.Thickness = 1.5
+MainStroke.Parent = MainFrame
 
 makeDraggable(MainFrame)
 
--- Header
+-- Header Title
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -20, 0, 40)
-TitleLabel.Position = UDim2.new(0, 10, 0, 4)
-TitleLabel.BackgroundTransparency = 1
+TitleLabel.Size = UDim2.new(1, 0, 0, 34)
 TitleLabel.Text = "OLIVER"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.Font = Enum.Font.SourceSansBold
-TitleLabel.TextSize = 19
+TitleLabel.TextSize = 17
+TitleLabel.BackgroundTransparency = 1
 TitleLabel.Parent = MainFrame
 
+-- Fixed-height scroll area so the UI stays compact on screen.
 local MainScroll = Instance.new("ScrollingFrame")
 MainScroll.Name = "MainScroll"
-MainScroll.Size = UDim2.new(1, -16, 1, -50)
-MainScroll.Position = UDim2.new(0, 8, 0, 45)
+MainScroll.Size = UDim2.new(1, -12, 1, -44)
+MainScroll.Position = UDim2.new(0, 6, 0, 38)
 MainScroll.BackgroundTransparency = 1
 MainScroll.BorderSizePixel = 0
-MainScroll.ScrollBarThickness = 3
-MainScroll.CanvasSize = UDim2.new(0, 0, 0, 120)
+MainScroll.ScrollBarThickness = 5
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 700)
 MainScroll.ScrollingDirection = Enum.ScrollingDirection.Y
 MainScroll.ClipsDescendants = true
+MainScroll.ZIndex = 5
 MainScroll.Parent = MainFrame
 
--- Auto Steal button is created here; its callback is assigned after the
--- automation functions are defined below.
-local AutoStealBtn = Instance.new("TextButton")
-AutoStealBtn.Name = "AutoStealBtn"
-AutoStealBtn.Position = UDim2.new(0.06, 0, 0, 8)
-styleButton(AutoStealBtn, "Auto Steal | OFF")
-AutoStealBtn.Parent = MainScroll
-
--- Loop button
-local LoopBtn = Instance.new("TextButton")
-LoopBtn.Name = "LoopBtn"
-LoopBtn.Position = UDim2.new(0.06, 0, 0, 64)
-styleButton(LoopBtn, "Loop | OFF")
-LoopBtn.Parent = MainScroll
-
--- Mobile draggable OLIVER button + tap to open/close Main Frame.
+-- Mobile: drag OLIVER button, or tap it to open/close MainFrame.
 do
     local dragging = false
     local moved = false
@@ -291,6 +254,23 @@ do
         )
     end)
 end
+
+-- 5. ESP EGG Button
+local EspEggBtn = Instance.new("TextButton")
+setupTouchButton(EspEggBtn)
+EspEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
+EspEggBtn.Position = UDim2.new(0.075, 0, 0, 70)
+EspEggBtn.Text = "ESP EGG | OFF"
+EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+EspEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+EspEggBtn.Font = Enum.Font.SourceSansBold
+EspEggBtn.TextSize = 15
+EspEggBtn.Parent = MainScroll
+
+local BtnCorner = Instance.new("UICorner")
+BtnCorner.CornerRadius = UDim.new(0, 8)
+BtnCorner.Parent = EspEggBtn
+
 
 -- ==================== AUTO STEAL ====================
 local autoSteal = false
@@ -361,7 +341,385 @@ local function setMovementLocked(locked)
     end
 end
 
--- Auto Steal / Loop buttons were created by the new UI above.
+local AutoStealBtn = Instance.new("TextButton")
+setupTouchButton(AutoStealBtn)
+AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 44)
+AutoStealBtn.Position = UDim2.new(0.075, 0, 0, 8)
+AutoStealBtn.Text = "Auto Steal | OFF"
+AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+AutoStealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoStealBtn.Font = Enum.Font.SourceSansBold
+AutoStealBtn.TextSize = 15
+AutoStealBtn.Parent = MainScroll
+
+local AutoCorner = Instance.new("UICorner")
+AutoCorner.CornerRadius = UDim.new(0, 8)
+AutoCorner.Parent = AutoStealBtn
+
+-- ==================== LOOP ====================
+local LoopBtn = Instance.new("TextButton")
+setupTouchButton(LoopBtn)
+LoopBtn.Name = "LoopBtn"
+LoopBtn.Size = UDim2.new(0.85, 0, 0, 44)
+LoopBtn.Position = UDim2.new(0.075, 0, 0, 64)
+LoopBtn.Text = "Loop | OFF"
+LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+LoopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoopBtn.Font = Enum.Font.SourceSansBold
+LoopBtn.TextSize = 15
+LoopBtn.AutoButtonColor = true
+LoopBtn.Parent = MainScroll
+
+local LoopCorner = Instance.new("UICorner")
+LoopCorner.CornerRadius = UDim.new(0, 8)
+LoopCorner.Parent = LoopBtn
+
+local SelectLabel = Instance.new("TextLabel")
+SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
+SelectLabel.Position = UDim2.new(0.075, 0, 0, 218)
+SelectLabel.Text = "Select Egg Type"
+SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
+SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+SelectLabel.BackgroundTransparency = 1
+SelectLabel.Font = Enum.Font.SourceSansBold
+SelectLabel.TextSize = 14
+SelectLabel.Parent = MainScroll
+
+local SelectEggBtn = Instance.new("TextButton")
+setupTouchButton(SelectEggBtn)
+SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
+SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 244)
+SelectEggBtn.Text = "All  ∨"
+SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SelectEggBtn.Font = Enum.Font.SourceSans
+SelectEggBtn.TextSize = 14
+SelectEggBtn.Parent = MainScroll
+
+local SelectCorner = Instance.new("UICorner")
+SelectCorner.CornerRadius = UDim.new(0, 8)
+SelectCorner.Parent = SelectEggBtn
+
+local ReturnLabel = Instance.new("TextLabel")
+ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
+ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
+ReturnLabel.Text = "Return To"
+ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
+ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+ReturnLabel.BackgroundTransparency = 1
+ReturnLabel.Font = Enum.Font.SourceSansBold
+ReturnLabel.TextSize = 14
+ReturnLabel.Parent = MainScroll
+
+local ReturnBtn = Instance.new("TextButton")
+setupTouchButton(ReturnBtn)
+ReturnBtn.Size = UDim2.new(0.85, 0, 0, 44)
+ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
+ReturnBtn.Text = "Base  ∨"
+ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ReturnBtn.Font = Enum.Font.SourceSans
+ReturnBtn.TextSize = 14
+ReturnBtn.Parent = MainScroll
+
+local ReturnCorner = Instance.new("UICorner")
+ReturnCorner.CornerRadius = UDim.new(0, 8)
+ReturnCorner.Parent = ReturnBtn
+
+-- Forward declaration: Return To uses EggList in its click handler.
+local EggList
+
+local ReturnList = Instance.new("Frame")
+ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
+ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+ReturnList.BorderSizePixel = 0
+ReturnList.Visible = false
+ReturnList.ZIndex = 110
+ReturnList.Parent = MainScroll
+
+local ReturnLayout = Instance.new("UIListLayout")
+ReturnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ReturnLayout.Parent = ReturnList
+
+local function addReturnOption(textValue, order)
+    local b = Instance.new("TextButton")
+        setupTouchButton(b)
+    b.Size = UDim2.new(1, -4, 0, 32)
+    b.LayoutOrder = order
+    b.Text = textValue
+    b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 13
+    b.ZIndex = 111
+    b.Parent = ReturnList
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = b
+    connectTap(b, function()
+        returnMode = textValue
+        ReturnBtn.Text = textValue .. "  ∨"
+        ReturnList.Visible = false
+    end)
+end
+addReturnOption("Start Position", 1)
+addReturnOption("Base", 2)
+
+-- NEW SIMPLE MAIN UI:
+-- Keep the old controls/logic alive, but hide them from the main panel.
+EspEggBtn.Visible = false
+SelectLabel.Visible = false
+SelectEggBtn.Visible = false
+ReturnLabel.Visible = false
+ReturnBtn.Visible = false
+ReturnList.Visible = false
+EggList.Visible = false
+
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 120)
+
+connectTap(ReturnBtn, function()
+    EggList.Visible = false
+    EggPage.Visible = false
+    MainScroll.CanvasPosition = Vector2.new(0, 0)
+    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
+    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
+    ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
+    ReturnList.Visible = not ReturnList.Visible
+end)
+
+EggList = Instance.new("ScrollingFrame")
+EggList.Size = UDim2.new(0.85, 0, 0, 220)
+EggList.Position = UDim2.new(0.075, 0, 0, 280)
+EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+EggList.BorderSizePixel = 0
+EggList.Visible = false
+EggList.ZIndex = 200
+EggList.ScrollBarThickness = 6
+EggList.ClipsDescendants = true
+EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
+EggList.Parent = MainScroll
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Parent = EggList
+
+-- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
+function isValidEgg(obj)
+    -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
+    if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
+        return false
+    end
+
+    -- Only track the actual egg Model, not its Handle/BillboardGui children.
+    if not obj:IsA("Model") then
+        return false
+    end
+
+    -- ១. រំលងប្រសិនបើវាជាផ្នែកមួយនៃ Player Character ឬ Pet ដែលកំពុងជិះ
+    local modelAncestor = obj:FindFirstAncestorOfClass("Model")
+    if modelAncestor and Players:GetPlayerFromCharacter(modelAncestor) then
+        return false
+    end
+
+    local nameLower = obj.Name:lower()
+
+    -- ២. រំលងពាក្យបច្ចេកទេសដែលមិនមែនជា Egg (ដូចជា EggSpawn, EggBase, Spawn -ល-)
+    if nameLower:find("spawn") or nameLower:find("base") or nameLower:find("holder") or nameLower:find("zone") then
+        return false
+    end
+
+    -- ៣. ត្រូវតែមានពាក្យ "egg" ក្នុងឈ្មោះ
+    if not nameLower:find("egg") then
+        return false
+    end
+
+    -- ៤. ការពារឈ្មោះជាន់គ្នា៖ បើវាជា Part ធម្មតា ហើយ Parent Model វាមានឈ្មោះ Egg ស្រាប់ -> យកតែ Parent Model
+    if obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") and obj.Parent.Name:lower():find("egg") then
+        return false
+    end
+
+    return true
+end
+
+
+local EggRarity = {
+    ["White Egg"] = "Common",
+    ["Brown Egg"] = "Common",
+    ["Cracked Egg"] = "Rare",
+    ["Easter Egg"] = "Rare",
+    ["Stone Egg"] = "Rare",
+    ["Leaf Egg"] = "Rare",
+    ["Mushroom Egg"] = "Epic",
+    ["Flower Egg"] = "Epic",
+    ["Slime Egg"] = "Epic",
+    ["Ice Egg"] = "Epic",
+    ["Glass Egg"] = "Legendary",
+    ["Golden Egg"] = "Legendary",
+    ["Crystal Egg"] = "Mythic",
+    ["Skull Egg"] = "Mythic",
+    ["Dominus Egg"] = "Mythic",
+    ["Flaming Egg"] = "Mythic",
+    ["Sinister Egg"] = "Mythic",
+    ["Soul Egg"] = "Mythic",
+    ["90K Luck Egg"] = "Mythic",
+    ["500K Luck Egg"] = "Mythic",
+    ["Aurora Egg"] = "Divine",
+    ["Galaxy Egg"] = "Divine",
+    ["Black Hole Egg"] = "Ethereal",
+    ["Solaris Egg"] = "Ethereal",
+    ["Cherub Egg"] = "Ethereal"
+}
+
+local EggTypes = {"All", "Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
+local RarityTypes = {"Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal"}
+
+local function isEggTypeSelected(rarity)
+    if selectedEggs.All then
+        return true
+    end
+    return rarity ~= nil and selectedEggs[rarity] == true
+end
+
+local function updateEggTypeButtonText()
+    if selectedEggs.All then
+        SelectEggBtn.Text = "All  ∨"
+        return
+    end
+
+    local count = 0
+    for _, rarity in ipairs(RarityTypes) do
+        if selectedEggs[rarity] then
+            count += 1
+        end
+    end
+
+    if count == 0 then
+        SelectEggBtn.Text = "None  ∨"
+    elseif count == 1 then
+        for _, rarity in ipairs(RarityTypes) do
+            if selectedEggs[rarity] then
+                SelectEggBtn.Text = rarity .. "  ∨"
+                return
+            end
+        end
+    else
+        SelectEggBtn.Text = tostring(count) .. " Selected  ∨"
+    end
+end
+
+local function getEggType(egg)
+    if not egg then return nil end
+    if EggRarity[egg.Name] then
+        return EggRarity[egg.Name]
+    end
+
+    -- Fallback: some versions display rarity/type in an attribute or StringValue.
+    local attr = egg:GetAttribute("Rarity") or egg:GetAttribute("Type") or egg:GetAttribute("EggType")
+    if typeof(attr) == "string" then
+        return attr
+    end
+
+    for _, d in ipairs(egg:GetDescendants()) do
+        if d:IsA("StringValue") and (d.Name == "Rarity" or d.Name == "Type" or d.Name == "EggType") then
+            return d.Value
+        end
+    end
+    return nil
+end
+
+local function refreshEggList()
+    for _, child in ipairs(EggList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    for order, eggType in ipairs(EggTypes) do
+        local b = Instance.new("TextButton")
+        setupTouchButton(b)
+        b.Size = UDim2.new(1, -4, 0, 28)
+        b.LayoutOrder = order
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.Font = Enum.Font.SourceSans
+        b.TextSize = 14
+        b.ZIndex = 201
+        b.Parent = EggList
+
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 5)
+        c.Parent = b
+
+        local function redraw()
+            local checked = selectedEggs[eggType] == true
+            b.Text = (checked and "☑ " or "☐ ") .. eggType
+            if checked then
+                b.BackgroundColor3 = Color3.fromRGB(0, 120, 75)
+            else
+                b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            end
+        end
+
+        redraw()
+
+        connectTap(b, function()
+            if eggType == "All" then
+                -- All = every rarity selected. Clicking again clears all.
+                if selectedEggs.All then
+                    selectedEggs = {}
+                else
+                    selectedEggs = { All = true }
+                end
+            else
+                -- Selecting a specific rarity turns off the All shortcut.
+                selectedEggs.All = nil
+                selectedEggs[eggType] = not selectedEggs[eggType]
+            end
+
+            -- If every rarity is selected individually, collapse to All.
+            local allRarities = true
+            for _, rarity in ipairs(RarityTypes) do
+                if not selectedEggs[rarity] then
+                    allRarities = false
+                    break
+                end
+            end
+            if allRarities then
+                selectedEggs = { All = true }
+            end
+
+            updateEggTypeButtonText()
+            refreshEggList()
+        end)
+    end
+
+    EggList.CanvasSize = UDim2.new(0, 0, 0, #EggTypes * 30 + 4)
+    MainScroll.CanvasSize = UDim2.new(0, 0, 0, 570)
+end
+
+updateEggTypeButtonText()
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 570)
+
+connectTap(SelectEggBtn, function()
+    if not EggList.Visible then
+        MainScroll.CanvasPosition = Vector2.new(0, 0)
+        refreshEggList()
+    end
+
+    EggList.Visible = not EggList.Visible
+    ReturnList.Visible = false
+
+    -- Move Return To below the open Egg Type list so the two menus never overlap.
+    if EggList.Visible then
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 538)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 563)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 563)
+    else
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
+    end
+end)
 
 -- ==================== BASE FINDER ====================
 -- Dynamically finds the player's own Ranch/Base/Plot.
@@ -908,7 +1266,7 @@ local function waitForEggTaken(egg)
     -- After Steal is triggered, stay with this Egg until the game actually
     -- removes/reparents it out of RenderedEggs and the state settles.
     -- This prevents returning to Base before the pickup is confirmed.
-    while autoSteal and loopSteal do
+    while autoSteal do
         local removed = (not egg) or (not egg.Parent) or (not RenderedEggs)
             or (not egg:IsDescendantOf(RenderedEggs))
 
@@ -1648,7 +2006,7 @@ local function stealOneEgg(egg)
         -- Keep trying the SAME Egg until the server/game actually accepts the pickup.
         -- There is intentionally no short retry deadline: we never switch to another
         -- Egg and never return to Base just because a few seconds elapsed.
-        while autoSteal and loopSteal do
+        while autoSteal do
             local removed = (not egg) or (not egg.Parent) or (not RenderedEggs)
                 or (not egg:IsDescendantOf(RenderedEggs))
 
@@ -1711,92 +2069,117 @@ local function stealOneEgg(egg)
     stealBusy = false
 end
 
-local function setAutoButton(on)
-    AutoStealBtn.Text = on and "Auto Steal | ON" or "Auto Steal | OFF"
-    AutoStealBtn.BackgroundColor3 = on
-        and Color3.fromRGB(0, 150, 90)
-        or Color3.fromRGB(38, 38, 52)
-end
-
-local function setLoopButton(on)
-    LoopBtn.Text = on and "Loop | ON" or "Loop | OFF"
-    LoopBtn.BackgroundColor3 = on
-        and Color3.fromRGB(0, 150, 90)
-        or Color3.fromRGB(38, 38, 52)
-end
-
--- Auto Steal: take ONE egg, then automatically turn OFF.
-local function runOneAutoSteal()
-    if autoSteal or loopSteal then return end
-
-    autoSteal = true
-    setAutoButton(true)
-    setMovementLocked(true)
-
-    task.spawn(function()
-        local egg = getCachedTargetEgg()
-
-        if egg then
-            stealOneEgg(egg)
-        end
-
-        autoSteal = false
-        setAutoButton(false)
-        setMovementLocked(false)
-        disconnectEggSpawnWatchers()
-        resetExpiredEggTarget()
-        autoStealStartCFrame = nil
-        capturedReturnBaseCFrame = nil
-    end)
-end
-
--- Loop: keep Auto Steal running continuously until Loop is turned OFF.
-local function runLoop()
-    if autoSteal then return end
-
-    loopSteal = true
-    setLoopButton(true)
-
-    autoSteal = true
-    setAutoButton(true)
-
-    setMovementLocked(true)
-
-    task.spawn(function()
-        while loopSteal do
-            local egg = getCachedTargetEgg()
-
-            if egg then
-                stealOneEgg(egg)
-            else
-                task.wait(0.25)
-            end
-        end
-
-        autoSteal = false
-        setAutoButton(false)
-        setMovementLocked(false)
-        disconnectEggSpawnWatchers()
-        resetExpiredEggTarget()
-        autoStealStartCFrame = nil
-        capturedReturnBaseCFrame = nil
-    end)
-end
-
-connectTap(AutoStealBtn, function()
-    if loopSteal then return end
-    runOneAutoSteal()
-end)
+local toggleAutoSteal
 
 connectTap(LoopBtn, function()
-    if loopSteal then
-        loopSteal = false
-        setLoopButton(false)
-        return
-    end
+    loopSteal = not loopSteal
 
-    runLoop()
+    if loopSteal then
+        LoopBtn.Text = "Loop | ON"
+        LoopBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+
+        -- Loop is the phone-friendly continuous mode. It automatically starts
+        -- Auto Steal so the same egg->return->next egg cycle keeps running.
+        if not autoSteal then
+            toggleAutoSteal()
+        end
+    else
+        LoopBtn.Text = "Loop | OFF"
+        LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+
+        -- Turning Loop off stops the continuous cycle.
+        if autoSteal then
+            autoSteal = false
+            AutoStealBtn.Text = "Auto Steal | OFF"
+            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            setMovementLocked(false)
+            disconnectEggSpawnWatchers()
+            resetExpiredEggTarget()
+            autoStealStartCFrame = nil
+            capturedReturnBaseCFrame = nil
+        end
+    end
 end)
+
+toggleAutoSteal = function()
+    autoSteal = not autoSteal
+
+    if autoSteal then
+        -- Save the exact place the player was standing when Auto Steal was turned ON.
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        autoStealStartCFrame = root and root.CFrame or nil
+
+        AutoStealBtn.Text = "Auto Steal | ON"
+        AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+
+        -- Capture the Base ONCE when Auto Steal starts. This is the same Base
+        -- discovery used by the old script, but we keep the CFrame for every return.
+        local baseCFrame = getRanchCFrame()
+        capturedReturnBaseCFrame = baseCFrame
+
+        if baseCFrame then
+            print("[OLIVER] Captured Return Base CFrame")
+        else
+            warn("[OLIVER] Could not capture Return Base; Auto Steal paused")
+            autoSteal = false
+            AutoStealBtn.Text = "Auto Steal | PAUSED"
+            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
+            return
+        end
+
+        -- Prevent manual character movement while the automation is running.
+        setMovementLocked(true)
+
+        setupEggSpawnWatchers()
+
+        task.spawn(function()
+            while autoSteal do
+                local egg = getCachedTargetEgg()
+
+                if egg then
+                    stealOneEgg(egg)
+                else
+                    -- No Egg right now: sleep until a new Egg spawns instead
+                    -- of continuously scanning the whole map.
+                    local fired = false
+                    local connection
+                    connection = eggSpawnEvent.Event:Connect(function()
+                        fired = true
+                    end)
+
+                    local deadline = os.clock() + 0.75
+                    while autoSteal and not fired and os.clock() < deadline do
+                        task.wait(0.05)
+                    end
+
+                    if connection then
+                        connection:Disconnect()
+                    end
+
+                    -- Small fallback rescan for games that don't emit the
+                    -- expected ChildAdded event.
+                    if autoSteal and not fired then
+                        cachedTargetAt = 0
+                    end
+                end
+            end
+        end)
+    else
+        loopSteal = false
+        LoopBtn.Text = "Loop | OFF"
+        LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        AutoStealBtn.Text = "Auto Steal | OFF"
+        AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        setMovementLocked(false)
+        disconnectEggSpawnWatchers()
+        resetExpiredEggTarget()
+        autoStealStartCFrame = nil
+        capturedReturnBaseCFrame = nil
+    end
+end
+
+connectTap(AutoStealBtn, toggleAutoSteal)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     if not autoSteal then return end
