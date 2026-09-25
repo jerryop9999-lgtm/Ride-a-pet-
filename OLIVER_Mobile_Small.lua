@@ -660,10 +660,17 @@ end
 local function getStealPrompt(egg)
     if not egg then return nil end
 
-    -- Fast path: most Eggs keep the prompt close to the model root.
+    -- Fast path: prioritize the actual in-game action shown on the Egg
+    -- ("Pick Up"), then fall back to any ProximityPrompt.
     for _, x in ipairs(egg:GetChildren()) do
-        if x:IsA("ProximityPrompt") and x.Name:lower():find("steal") then
-            return x
+        if x:IsA("ProximityPrompt") then
+            local action = tostring(x.ActionText or ""):lower()
+            local object = tostring(x.ObjectText or ""):lower()
+            local name = x.Name:lower()
+            if action:find("pick up", 1, true) or action:find("pickup", 1, true)
+                or object:find("egg", 1, true) or name:find("steal", 1, true) then
+                return x
+            end
         end
     end
 
@@ -1106,7 +1113,7 @@ local function stealOneEgg(egg)
         return
     end
 
-    -- Move to the Egg. No Auto Click / VirtualInput is used.
+    -- Move to the Egg. No mouse/touch Auto Click and no VirtualInput are used.
     Status.Text = "GO EGG"
     teleportCharacter(eggPart.CFrame, 0.75)
     local releaseLock = lockToEgg(eggPart, 0.75)
@@ -1118,18 +1125,32 @@ local function stealOneEgg(egg)
 
     Status.Text = "PROMPT"
 
-    -- Give the normal in-game ProximityPrompt a chance to appear/resolve,
-    -- but do not simulate the player's click. If the game auto-steals on
-    -- proximity, the egg will disappear and we can return to Base.
-    local started = os.clock()
-    local taken = false
-    while autoSteal and os.clock() - started < 12 do
-        if not isValidEgg(egg) then
-            taken = true
-            break
+    -- ACTIVATE ONLY THE EGG'S ProximityPrompt.
+    -- This is not a mouse/touch auto-click and does not use VirtualInput.
+    -- The screenshot shows the actual action is "Pick Up", so the prompt
+    -- must be fired after moving into range.
+    local triggered = false
+    pcall(function()
+        if typeof(fireproximityprompt) == "function" then
+            fireproximityprompt(prompt)
+            triggered = true
         end
-        task.wait(0.10)
+    end)
+
+    -- Executor fallback: use the ProximityPrompt hold API itself.
+    if not triggered then
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(math.max(0, tonumber(prompt.HoldDuration) or 0))
+            prompt:InputHoldEnd()
+            triggered = true
+        end)
     end
+
+    -- CONFIRM FIRST: wait until the selected Egg is really gone.
+    -- Only after confirmation do we return to Base, like the earlier build.
+    Status.Text = "CONFIRM"
+    local taken = confirmEggTaken(egg)
 
     releaseLock()
 
@@ -1139,7 +1160,7 @@ local function stealOneEgg(egg)
         if returned then task.wait(0.25) end
         resetExpiredEggTarget()
     else
-        -- Do not pretend an egg was stolen. Leave it alone and rescan later.
+        -- Never return to Base unless the Egg was confirmed taken.
         Status.Text = "WAIT"
         resetExpiredEggTarget()
         task.wait(0.35)
