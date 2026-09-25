@@ -18,12 +18,29 @@ end
 local function connectTap(button, callback)
     if not button then return end
     setupTouchButton(button)
+    local activeTouch = nil
+    local activeMouse = false
 
-    -- Activated is the reliable one-finger event for both
-    -- touch screens and mouse. It avoids InputEnded being swallowed
-    -- by ScrollingFrame/drag handling on phones.
-    button.Activated:Connect(function()
-        callback()
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            activeTouch = input
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            activeMouse = true
+        end
+    end)
+
+    button.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            if activeTouch == input then
+                activeTouch = nil
+                callback()
+            end
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if activeMouse then
+                activeMouse = false
+                callback()
+            end
+        end
     end)
 end
 
@@ -139,8 +156,8 @@ ToggleCorner.Parent = ToggleBtn
 local MainFrame = Instance.new("Frame")
 MainFrame.Active = true
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 220, 0, 280)
-MainFrame.Position = UDim2.new(0.5, -110, 0.5, -140)
+MainFrame.Size = UDim2.new(0, 210, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -105, 0.5, -140)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -164,7 +181,7 @@ TitleLabel.Size = UDim2.new(1, 0, 0, 34)
 TitleLabel.Text = "OLIVER"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.Font = Enum.Font.SourceSansBold
-TitleLabel.TextSize = 18
+TitleLabel.TextSize = 17
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Parent = MainFrame
 
@@ -176,7 +193,7 @@ MainScroll.Position = UDim2.new(0, 6, 0, 38)
 MainScroll.BackgroundTransparency = 1
 MainScroll.BorderSizePixel = 0
 MainScroll.ScrollBarThickness = 5
-MainScroll.CanvasSize = UDim2.new(0, 0, 0, 660)
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 700)
 MainScroll.ScrollingDirection = Enum.ScrollingDirection.Y
 MainScroll.ClipsDescendants = true
 MainScroll.ZIndex = 5
@@ -206,6 +223,7 @@ BtnCorner.Parent = EspEggBtn
 
 -- ==================== AUTO STEAL ====================
 local autoSteal = false
+local loopSteal = false -- continuously acquire eggs
 local selectedEggs = { All = true } -- multi-select rarity/type selector
 local holdTime = 0.0
 local stealBusy = false
@@ -287,9 +305,27 @@ local AutoCorner = Instance.new("UICorner")
 AutoCorner.CornerRadius = UDim.new(0, 8)
 AutoCorner.Parent = AutoStealBtn
 
+-- ==================== LOOP ====================
+local LoopBtn = Instance.new("TextButton")
+setupTouchButton(LoopBtn)
+LoopBtn.Name = "LoopBtn"
+LoopBtn.Size = UDim2.new(0.85, 0, 0, 44)
+LoopBtn.Position = UDim2.new(0.075, 0, 0, 170)
+LoopBtn.Text = "Loop | OFF"
+LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+LoopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoopBtn.Font = Enum.Font.SourceSansBold
+LoopBtn.TextSize = 15
+LoopBtn.AutoButtonColor = true
+LoopBtn.Parent = MainScroll
+
+local LoopCorner = Instance.new("UICorner")
+LoopCorner.CornerRadius = UDim.new(0, 8)
+LoopCorner.Parent = LoopBtn
+
 local SelectLabel = Instance.new("TextLabel")
 SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
-SelectLabel.Position = UDim2.new(0.075, 0, 0, 168)
+SelectLabel.Position = UDim2.new(0.075, 0, 0, 218)
 SelectLabel.Text = "Select Egg Type"
 SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
 SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -301,7 +337,7 @@ SelectLabel.Parent = MainScroll
 local SelectEggBtn = Instance.new("TextButton")
 setupTouchButton(SelectEggBtn)
 SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
-SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 194)
+SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 244)
 SelectEggBtn.Text = "All  ∨"
 SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -315,7 +351,7 @@ SelectCorner.Parent = SelectEggBtn
 
 local ReturnLabel = Instance.new("TextLabel")
 ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
-ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
+ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
 ReturnLabel.Text = "Return To"
 ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
 ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -327,7 +363,7 @@ ReturnLabel.Parent = MainScroll
 local ReturnBtn = Instance.new("TextButton")
 setupTouchButton(ReturnBtn)
 ReturnBtn.Size = UDim2.new(0.85, 0, 0, 44)
-ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
+ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
 ReturnBtn.Text = "Base  ∨"
 ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -344,7 +380,7 @@ local EggList
 
 local ReturnList = Instance.new("Frame")
 ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
-ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
 ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 ReturnList.BorderSizePixel = 0
 ReturnList.Visible = false
@@ -383,15 +419,15 @@ connectTap(ReturnBtn, function()
     EggList.Visible = false
     EggPage.Visible = false
     MainScroll.CanvasPosition = Vector2.new(0, 0)
-    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
-    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-    ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
+    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
+    ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
     ReturnList.Visible = not ReturnList.Visible
 end)
 
 EggList = Instance.new("ScrollingFrame")
 EggList.Size = UDim2.new(0.85, 0, 0, 220)
-EggList.Position = UDim2.new(0.075, 0, 0, 230)
+EggList.Position = UDim2.new(0.075, 0, 0, 280)
 EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 EggList.BorderSizePixel = 0
 EggList.Visible = false
@@ -612,13 +648,13 @@ connectTap(SelectEggBtn, function()
 
     -- Move Return To below the open Egg Type list so the two menus never overlap.
     if EggList.Visible then
-        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 488)
-        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 513)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 513)
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 538)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 563)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 563)
     else
-        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 245)
-        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 270)
-        ReturnList.Position = UDim2.new(0.075, 0, 0, 270)
+        ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
+        ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
+        ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
     end
 end)
 
@@ -1299,7 +1335,7 @@ local EggPageBtn = Instance.new("TextButton")
 setupTouchButton(EggPageBtn)
 EggPageBtn.Name = "EggPageBtn"
 EggPageBtn.Size = UDim2.new(0.85, 0, 0, 44)
-EggPageBtn.Position = UDim2.new(0.075, 0, 0, 315)
+EggPageBtn.Position = UDim2.new(0.075, 0, 0, 370)
 EggPageBtn.Text = "Egg Page  >"
 EggPageBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 EggPageBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -1315,8 +1351,8 @@ EggPageCorner.Parent = EggPageBtn
 EggMainFrame = Instance.new("Frame")
 EggMainFrame.Active = true
 EggMainFrame.Name = "EggMainFrame"
-EggMainFrame.Size = UDim2.new(0, 220, 0, 280)
-EggMainFrame.Position = UDim2.new(0.5, -110, 0.5, 15)
+EggMainFrame.Size = UDim2.new(0, 210, 0, 280)
+EggMainFrame.Position = UDim2.new(0.5, -105, 0.5, 15)
 EggMainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
 EggMainFrame.BorderSizePixel = 0
 EggMainFrame.ClipsDescendants = true
@@ -1958,7 +1994,39 @@ local function stealOneEgg(egg)
     stealBusy = false
 end
 
-connectTap(AutoStealBtn, function()
+local toggleAutoSteal
+
+connectTap(LoopBtn, function()
+    loopSteal = not loopSteal
+
+    if loopSteal then
+        LoopBtn.Text = "Loop | ON"
+        LoopBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+
+        -- Loop is the phone-friendly continuous mode. It automatically starts
+        -- Auto Steal so the same egg->return->next egg cycle keeps running.
+        if not autoSteal then
+            toggleAutoSteal()
+        end
+    else
+        LoopBtn.Text = "Loop | OFF"
+        LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+
+        -- Turning Loop off stops the continuous cycle.
+        if autoSteal then
+            autoSteal = false
+            AutoStealBtn.Text = "Auto Steal | OFF"
+            AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            setMovementLocked(false)
+            disconnectEggSpawnWatchers()
+            resetExpiredEggTarget()
+            autoStealStartCFrame = nil
+            capturedReturnBaseCFrame = nil
+        end
+    end
+end)
+
+toggleAutoSteal = function()
     autoSteal = not autoSteal
 
     if autoSteal then
@@ -2023,6 +2091,9 @@ connectTap(AutoStealBtn, function()
             end
         end)
     else
+        loopSteal = false
+        LoopBtn.Text = "Loop | OFF"
+        LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         AutoStealBtn.Text = "Auto Steal | OFF"
         AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
         setMovementLocked(false)
@@ -2031,7 +2102,9 @@ connectTap(AutoStealBtn, function()
         autoStealStartCFrame = nil
         capturedReturnBaseCFrame = nil
     end
-end)
+end
+
+connectTap(AutoStealBtn, toggleAutoSteal)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     if not autoSteal then return end
