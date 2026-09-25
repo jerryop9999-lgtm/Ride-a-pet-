@@ -21,6 +21,11 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    warn("[OLIVER] LocalPlayer is not available; script stopped safely.")
+    return
+end
+
 local RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
 
 -- =========================================================
@@ -537,24 +542,6 @@ local function setMovementLocked(locked)
     end
 end
 
-function isValidEgg(obj)
-    -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
-    if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
-        return false
-    end
-
-    -- Only track the actual egg Model, not its Handle/BillboardGui children.
-    if not obj:IsA("Model") then
-        return false
-    end
-
-    -- ១. រំលងប្រសិនបើវាជាផ្នែកមួយនៃ Player Character ឬ Pet ដែលកំពុងជិះ
-    local modelAncestor = obj:FindFirstAncestorOfClass("Model")
-    if modelAncestor and Players:GetPlayerFromCharacter(modelAncestor) then
-        return false
-    end
-
-    local nameLower = obj.Name:lower()
 local function valueMatchesPlayer(value)
     if value == LocalPlayer then return true end
     if typeof(value) == "string" then
@@ -1122,6 +1109,25 @@ local function returnAfterSuccess()
     return teleportCharacter(targetCFrame, 2.5)
 end
 
+local function triggerStealPrompt(prompt)
+    if not prompt then return false end
+
+    -- Executor API, when available. Do not assume it exists.
+    local firePrompt = rawget(_G, "fireproximityprompt")
+    if type(firePrompt) == "function" then
+        local ok = pcall(firePrompt, prompt, 0, true)
+        if ok then return true end
+    end
+
+    -- Roblox fallback: simulate the normal ProximityPrompt hold.
+    local ok = pcall(function()
+        prompt:InputHoldBegin()
+        task.wait(0.03)
+        prompt:InputHoldEnd()
+    end)
+    return ok
+end
+
 local function confirmEggTaken(egg)
     while autoSteal do
         RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
@@ -1171,17 +1177,7 @@ local function stealOneEgg(egg)
         local success = false
 
         while autoSteal do
-            if fireproximityprompt then
-                pcall(function()
-                    fireproximityprompt(prompt, 0, true)
-                end)
-            else
-                pcall(function()
-                    prompt:InputHoldBegin()
-                    task.wait()
-                    prompt:InputHoldEnd()
-                end)
-            end
+            triggerStealPrompt(prompt)
 
             if confirmEggTaken(egg) then
                 success = true
