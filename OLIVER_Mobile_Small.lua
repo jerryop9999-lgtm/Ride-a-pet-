@@ -784,9 +784,16 @@ local function lockToEgg(eggPart, heightOffset)
     end
 end
 
--- ==================== EGG ORDER PRIORITY ====================
--- Auto Steal uses the configured EggPriority order.
--- Player Hatch Luck is NOT used to choose the target Egg.
+-- ==================== EGG LUCK / HATCH LUCK PRIORITY ====================
+-- IMPORTANT:
+-- Ride A Pet has TWO different luck concepts:
+--   1) Egg Luck = the Luck value printed on each map Egg (30, 50, 1K, 1M, ...)
+--   2) Player Hatch Luck = the player's global Hatch Luck upgrade.
+-- Player Hatch Luck is the same modifier for all Eggs, so it cannot be used
+-- to rank Eggs against each other. Auto Steal therefore ranks by EGG LUCK.
+--
+-- The game can expose Egg Luck through attributes, ValueObjects, BillboardGui
+-- text, or only through the egg's known name. We check all of those paths.
 
 local function parseLuckNumber(value)
     if value == nil then return nil end
@@ -1013,46 +1020,27 @@ local function getEggByName(name)
 end
 
 local function findTargetEgg()
-    -- Use the EggPriority order only.
-    -- No Hatch Luck is used here. The first Egg in the configured order
-    -- that is currently present in the map is always selected.
+    -- ALWAYS choose the highest-Luck egg that is ACTUALLY in the map.
+    -- This does not depend on the order shown in the Egg Order panel.
+    local bestEgg = nil
+    local bestLuck = -1
+
     if not RenderedEggs then
         RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
     end
     if not RenderedEggs then return nil end
 
-    for _, eggName in ipairs(EggPriority) do
-        local best = nil
-
-        for _, egg in ipairs(RenderedEggs:GetChildren()) do
-            if isValidEgg(egg) then
-                local sameName = egg.Name == eggName
-                    or egg.Name:lower() == eggName:lower()
-                if sameName then
-                    best = egg
-                    break
-                end
-            end
-        end
-
-        if best then
-            return best
-        end
-    end
-
-    -- Support live eggs whose current name differs from the researched list:
-    -- choose by the live Egg Luck value only as a fallback. Hatch Luck is never used.
-    local fallback, fallbackLuck = nil, -1
     for _, egg in ipairs(RenderedEggs:GetChildren()) do
         if isValidEgg(egg) then
             local luck = getEggLuck(egg)
-            if luck > fallbackLuck then
-                fallbackLuck = luck
-                fallback = egg
+            if luck > bestLuck then
+                bestLuck = luck
+                bestEgg = egg
             end
         end
     end
-    return fallback
+
+    return bestEgg
 end
 
 
@@ -1134,19 +1122,33 @@ local function returnAfterSuccess()
 end
 
 local function triggerStealPrompt(prompt)
-    if not prompt then return false end
+    if not prompt or not prompt.Parent then return false end
 
-    -- Executor API, when available. Do not assume it exists.
-    local firePrompt = rawget(_G, "fireproximityprompt")
+    -- Auto-click/auto-hold: make the prompt instant before triggering it.
+    -- Roblox documents HoldDuration = 0 as immediate activation.
+    pcall(function()
+        prompt.Enabled = true
+        prompt.HoldDuration = 0
+    end)
+
+    -- 1) Executor prompt trigger, when the executor exposes it.
+    local firePrompt = nil
+    pcall(function() firePrompt = fireproximityprompt end)
     if type(firePrompt) == "function" then
-        local ok = pcall(firePrompt, prompt, 0, true)
-        if ok then return true end
+        local ok = pcall(function()
+            firePrompt(prompt, 0, true)
+        end)
+        if ok then
+            return true
+        end
     end
 
-    -- Roblox fallback: simulate the normal ProximityPrompt hold.
+    -- 2) Native Roblox ProximityPrompt input path.
+    -- This is the same interaction path used by the prompt UI; no manual
+    -- phone tap is required after the character is moved into range.
     local ok = pcall(function()
         prompt:InputHoldBegin()
-        task.wait(0.03)
+        task.wait(0.02)
         prompt:InputHoldEnd()
     end)
     return ok
@@ -1361,16 +1363,16 @@ task.spawn(function()
     end
 end)
 
-print("[OLIVER] Fresh UI loaded | Egg Order Auto Steal | READY")
+print("[OLIVER] Best-Egg Auto Steal | AUTO PICKUP | AUTO START")
 
 -- =========================================================
 -- STARTUP
 -- =========================================================
 
-AutoStealBtn.Text = "Auto Steal | OFF"
-AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+AutoStealBtn.Text = "Auto Steal | ON"
+AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 145, 90)
 HoldLabel.Text = "Hold 0.0s"
-Status.Text = "OFF"
+Status.Text = "AUTO BEST"
 Status.TextColor3 = Color3.fromRGB(0, 210, 255)
 MapPanelBtn.Text = "Egg in Map | OFF"
 MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
@@ -1379,3 +1381,36 @@ MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 MainFrame.Visible = false
 MapFrame.Visible = false
 OrderFrame.Visible = false
+
+
+-- AUTO START: no button press is required.
+-- It continuously selects the highest-Luck egg currently in RenderedEggs,
+-- steals it, returns to Base, then repeats.
+task.defer(function()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local root = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
+    autoStealStartCFrame = root and root.CFrame or nil
+    capturedReturnBaseCFrame = getRanchCFrame()
+
+    if not capturedReturnBaseCFrame then
+        Status.Text = "NO BASE"
+        Status.TextColor3 = Color3.fromRGB(220, 150, 40)
+        AutoStealBtn.Text = "Auto Steal | WAIT"
+        return
+    end
+
+    autoSteal = true
+    setMovementLocked(true)
+    setupEggSpawnWatchers()
+
+    task.spawn(function()
+        while autoSteal do
+            local egg = getCachedTargetEgg()
+            if egg then
+                stealOneEgg(egg)
+            else
+                task.wait(0.12)
+            end
+        end
+    end)
+end)
