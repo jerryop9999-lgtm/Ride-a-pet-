@@ -1,239 +1,104 @@
+--[[
+    OLIVER - New Mobile UI
+    Built as a new standalone script.
+    Core behavior:
+      • One-finger mobile buttons
+      • External OLIVER open/close button
+      • Draggable main window
+      • Auto Steal = one Egg, then return and OFF
+      • Loop = Egg -> Steal -> Return -> 1s -> next Egg
+      • Egg rarity filter
+      • Return To: Base / Start Position
+]]
+
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
 
--- Mobile touch support: every TextButton accepts direct finger taps.
+local LocalPlayer = Players.LocalPlayer
+local RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+
+-- ==================== MOBILE INPUT ====================
+
 local function setupTouchButton(button)
-    if button and button:IsA("TextButton") then
-        button.Active = true
-        button.Selectable = true
-        button.AutoButtonColor = true
-    end
+    if not button then return end
+    button.Active = true
+    button.Selectable = true
+    button.AutoButtonColor = true
 end
 
--- One-finger tap handler: use the button's own input so ScrollingFrame/drag
--- handling cannot require a second finger. Touch activates on release.
 local function connectTap(button, callback)
     if not button then return end
     setupTouchButton(button)
-    local activeTouch = nil
-    local activeMouse = false
+
+    local touchInput
+    local mouseDown = false
 
     button.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch then
-            activeTouch = input
+            touchInput = input
         elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            activeMouse = true
+            mouseDown = true
         end
     end)
 
     button.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch then
-            if activeTouch == input then
-                activeTouch = nil
+            if touchInput == input then
+                touchInput = nil
                 callback()
             end
         elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if activeMouse then
-                activeMouse = false
+            if mouseDown then
+                mouseDown = false
                 callback()
             end
         end
     end)
 end
 
-local LocalPlayer = Players.LocalPlayer
-
--- Ride A Pet: Eggs are rendered under Workspace.RenderedEggs
-local RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-
--- 1. ScreenGui Setup
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OliverHubUI_EggDistance"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-ScreenGui.DisplayOrder = 999
-
--- Make every button reliably tappable on phones/tablets.
-ScreenGui.DescendantAdded:Connect(function(obj)
-    if obj:IsA("GuiButton") then
-        obj.Active = true
-        obj.AutoButtonColor = true
-    end
-end)
-
-if gethui then
-    ScreenGui.Parent = gethui()
-elseif syn and syn.protect_gui then
-    syn.protect_gui(ScreenGui)
-    ScreenGui.Parent = CoreGui
-else
-    ScreenGui.Parent = CoreGui
-end
-
--- 2. មុខងារ Drag (អូស Frame/Button)
-local function makeDraggable(gui)
+local function makeDraggable(frame, handle)
     local dragging = false
-    local dragInput, dragStart, startPos
-
-    gui.Active = true
-
-    gui.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        -- Do not steal a tap from any Button / ScrollingFrame underneath.
-        local objects = game:GetService("GuiService"):GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
-        for _, obj in ipairs(objects) do
-            if obj:IsA("GuiButton") or obj:IsA("ScrollingFrame") then
-                return
-            end
-            if obj == gui then
-                break
-            end
-        end
-
-        dragging = true
-        dragStart = input.Position
-        startPos = gui.Position
-
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                dragInput = nil
-            end
-        end)
-    end)
-
-    gui.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging or input ~= dragInput then
-            return
-        end
-
-        local delta = input.Position - dragStart
-        gui.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end)
-end
--- 3. Button បិទ/បើក Main Frame
-local EggMainFrame
-
-local ToggleBtn = Instance.new("TextButton")
-setupTouchButton(ToggleBtn)
-ToggleBtn.Active = true
-ToggleBtn.Name = "OLIVER"
-ToggleBtn.Size = UDim2.new(0, 78, 0, 32)
-ToggleBtn.Position = UDim2.new(0, 15, 0.35, 0)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-ToggleBtn.Text = "OLIVER"
-ToggleBtn.TextColor3 = Color3.fromRGB(0, 230, 255)
-ToggleBtn.Font = Enum.Font.SourceSansBold
-ToggleBtn.TextSize = 13
-ToggleBtn.Parent = ScreenGui
-
-local ToggleCorner = Instance.new("UICorner")
-ToggleCorner.CornerRadius = UDim.new(0, 8)
-ToggleCorner.Parent = ToggleBtn
-
--- ToggleBtn is tap-only on mobile so one finger activates it reliably.
-
--- 4. Main Frame
-local MainFrame = Instance.new("Frame")
-MainFrame.Active = true
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 220, 0, 190)
-MainFrame.Position = UDim2.new(0.5, -110, 0.5, -95)
-MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
-MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true
-MainFrame.Visible = false
-MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
-MainCorner.Parent = MainFrame
-
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(0, 200, 255)
-MainStroke.Thickness = 1.5
-MainStroke.Parent = MainFrame
-
-makeDraggable(MainFrame)
-
--- Header Title
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, 0, 0, 34)
-TitleLabel.Text = "OLIVER"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.Font = Enum.Font.SourceSansBold
-TitleLabel.TextSize = 17
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Parent = MainFrame
-
--- Fixed-height scroll area so the UI stays compact on screen.
-local MainScroll = Instance.new("ScrollingFrame")
-MainScroll.Name = "MainScroll"
-MainScroll.Size = UDim2.new(1, -12, 1, -44)
-MainScroll.Position = UDim2.new(0, 6, 0, 38)
-MainScroll.BackgroundTransparency = 1
-MainScroll.BorderSizePixel = 0
-MainScroll.ScrollBarThickness = 5
-MainScroll.CanvasSize = UDim2.new(0, 0, 0, 700)
-MainScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-MainScroll.ClipsDescendants = true
-MainScroll.ZIndex = 5
-MainScroll.Parent = MainFrame
-
--- Mobile: drag OLIVER button, or tap it to open/close MainFrame.
-do
-    local dragging = false
-    local moved = false
     local dragInput
     local dragStart
     local startPos
 
-    ToggleBtn.InputBegan:Connect(function(input)
+    frame.Active = true
+    handle = handle or frame
+    handle.Active = true
+
+    handle.InputBegan:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.Touch
             and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
             return
         end
 
+        -- Never steal a button tap.
+        local objects = GuiService:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
+        for _, obj in ipairs(objects) do
+            if obj:IsA("GuiButton") then
+                return
+            end
+        end
+
         dragging = true
-        moved = false
-        dragInput = input
         dragStart = input.Position
-        startPos = ToggleBtn.Position
+        startPos = frame.Position
 
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
                 dragInput = nil
-
-                if not moved then
-                    MainFrame.Visible = not MainFrame.Visible
-                end
             end
         end)
     end)
 
-    ToggleBtn.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseMovement then
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
     end)
@@ -242,11 +107,7 @@ do
         if not dragging or input ~= dragInput then return end
 
         local delta = input.Position - dragStart
-        if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
-            moved = true
-        end
-
-        ToggleBtn.Position = UDim2.new(
+        frame.Position = UDim2.new(
             startPos.X.Scale,
             startPos.X.Offset + delta.X,
             startPos.Y.Scale,
@@ -255,42 +116,254 @@ do
     end)
 end
 
--- 5. ESP EGG Button
-local EspEggBtn = Instance.new("TextButton")
-setupTouchButton(EspEggBtn)
-EspEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
-EspEggBtn.Position = UDim2.new(0.075, 0, 0, 70)
-EspEggBtn.Text = "ESP EGG | OFF"
-EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-EspEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-EspEggBtn.Font = Enum.Font.SourceSansBold
-EspEggBtn.TextSize = 15
-EspEggBtn.Parent = MainScroll
+-- ==================== GUI ====================
 
-local BtnCorner = Instance.new("UICorner")
-BtnCorner.CornerRadius = UDim.new(0, 8)
-BtnCorner.Parent = EspEggBtn
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "OLIVER_New"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+ScreenGui.DisplayOrder = 999999
 
+if gethui then
+    ScreenGui.Parent = gethui()
+elseif syn and syn.protect_gui then
+    pcall(function() syn.protect_gui(ScreenGui) end)
+    ScreenGui.Parent = CoreGui
+else
+    ScreenGui.Parent = CoreGui
+end
 
--- ==================== AUTO STEAL ====================
+ScreenGui.DescendantAdded:Connect(function(obj)
+    if obj:IsA("GuiButton") then
+        setupTouchButton(obj)
+    end
+end)
+
+-- Floating external button.
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "OLIVER"
+ToggleBtn.Size = UDim2.new(0, 84, 0, 36)
+ToggleBtn.Position = UDim2.new(0, 12, 0.42, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(22, 25, 34)
+ToggleBtn.Text = "OLIVER"
+ToggleBtn.TextColor3 = Color3.fromRGB(0, 220, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 14
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Parent = ScreenGui
+setupTouchButton(ToggleBtn)
+
+local tc = Instance.new("UICorner")
+tc.CornerRadius = UDim.new(0, 9)
+tc.Parent = ToggleBtn
+
+local ts = Instance.new("UIStroke")
+ts.Color = Color3.fromRGB(0, 190, 255)
+ts.Thickness = 1
+ts.Parent = ToggleBtn
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 235, 0, 305)
+MainFrame.Position = UDim2.new(0.5, -117, 0.5, -152)
+MainFrame.BackgroundColor3 = Color3.fromRGB(17, 19, 27)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+MainFrame.ClipsDescendants = true
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+
+local mc = Instance.new("UICorner")
+mc.CornerRadius = UDim.new(0, 13)
+mc.Parent = MainFrame
+
+local ms = Instance.new("UIStroke")
+ms.Color = Color3.fromRGB(0, 190, 255)
+ms.Thickness = 1.3
+ms.Parent = MainFrame
+
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 43)
+Header.BackgroundTransparency = 1
+Header.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -20, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "OLIVER"
+Title.TextColor3 = Color3.fromRGB(245, 250, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 19
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(0, 90, 0, 24)
+Status.Position = UDim2.new(1, -100, 0, 9)
+Status.BackgroundTransparency = 1
+Status.Text = "IDLE"
+Status.TextColor3 = Color3.fromRGB(150, 155, 165)
+Status.Font = Enum.Font.SourceSansBold
+Status.TextSize = 12
+Status.TextXAlignment = Enum.TextXAlignment.Right
+Status.Parent = Header
+
+local MainScroll = Instance.new("ScrollingFrame")
+MainScroll.Name = "MainScroll"
+MainScroll.Size = UDim2.new(1, -12, 1, -49)
+MainScroll.Position = UDim2.new(0, 6, 0, 45)
+MainScroll.BackgroundTransparency = 1
+MainScroll.BorderSizePixel = 0
+MainScroll.ScrollBarThickness = 4
+MainScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 570)
+MainScroll.Parent = MainFrame
+
+makeDraggable(MainFrame, Header)
+
+connectTap(ToggleBtn, function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- ==================== STATE ====================
+
 local autoSteal = false
-local loopSteal = false -- continuously acquire eggs
-local selectedEggs = { All = true } -- multi-select rarity/type selector
+local loopSteal = false
+local selectedEggs = { All = true }
 local holdTime = 0.0
 local stealBusy = false
 local autoStealStartCFrame = nil
 local capturedReturnBaseCFrame = nil
-local returnMode = "Base" -- "Start Position" or "Base"
+local returnMode = "Base"
 
--- Lock player movement while Auto Steal is ON so manual input cannot
--- fight the teleport/steal sequence. Original values are restored on OFF.
-local movementLock = {
-    controls = nil,
-    walkSpeed = nil,
-    jumpPower = nil,
-    jumpHeight = nil,
-    autoRotate = nil,
-}
+-- Hidden compatibility page used only as a state target by the filter menu.
+local EggPage = Instance.new("Frame")
+EggPage.Visible = false
+EggPage.Parent = MainScroll
+
+
+-- ==================== NEW CONTROL UI ====================
+
+local function newButton(name, textValue, y, height)
+    local b = Instance.new("TextButton")
+    b.Name = name
+    b.Size = UDim2.new(1, -18, 0, height or 42)
+    b.Position = UDim2.new(0, 9, 0, y)
+    b.BackgroundColor3 = Color3.fromRGB(38, 41, 53)
+    b.TextColor3 = Color3.fromRGB(245, 245, 250)
+    b.Text = textValue
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = 15
+    b.BorderSizePixel = 0
+    b.Parent = MainScroll
+    setupTouchButton(b)
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 9)
+    c.Parent = b
+    return b
+end
+
+local AutoStealBtn = newButton("AutoSteal", "Auto Steal | OFF", 8, 46)
+local LoopBtn = newButton("Loop", "Loop | OFF", 61, 46)
+
+local SelectLabel = Instance.new("TextLabel")
+SelectLabel.Size = UDim2.new(1, -18, 0, 19)
+SelectLabel.Position = UDim2.new(0, 9, 0, 113)
+SelectLabel.BackgroundTransparency = 1
+SelectLabel.Text = "Egg Type"
+SelectLabel.TextColor3 = Color3.fromRGB(190, 195, 205)
+SelectLabel.Font = Enum.Font.SourceSansBold
+SelectLabel.TextSize = 13
+SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
+SelectLabel.Parent = MainScroll
+
+local SelectEggBtn = newButton("EggType", "All  ∨", 135, 40)
+SelectEggBtn.Font = Enum.Font.SourceSans
+
+local EggList
+EggList = Instance.new("ScrollingFrame")
+EggList.Name = "EggList"
+EggList.Size = UDim2.new(1, -18, 0, 205)
+EggList.Position = UDim2.new(0, 9, 0, 179)
+EggList.BackgroundColor3 = Color3.fromRGB(25, 28, 38)
+EggList.BorderSizePixel = 0
+EggList.Visible = false
+EggList.ZIndex = 20
+EggList.ScrollBarThickness = 5
+EggList.ClipsDescendants = true
+EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
+EggList.Parent = MainScroll
+
+local ell = Instance.new("UIListLayout")
+ell.SortOrder = Enum.SortOrder.LayoutOrder
+ell.Padding = UDim.new(0, 2)
+ell.Parent = EggList
+
+local ReturnLabel = Instance.new("TextLabel")
+ReturnLabel.Size = UDim2.new(1, -18, 0, 19)
+ReturnLabel.Position = UDim2.new(0, 9, 0, 185)
+ReturnLabel.BackgroundTransparency = 1
+ReturnLabel.Text = "Return To"
+ReturnLabel.TextColor3 = Color3.fromRGB(190, 195, 205)
+ReturnLabel.Font = Enum.Font.SourceSansBold
+ReturnLabel.TextSize = 13
+ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
+ReturnLabel.Parent = MainScroll
+
+local ReturnBtn = newButton("ReturnTo", "Base  ∨", 207, 40)
+ReturnBtn.Font = Enum.Font.SourceSans
+
+local ReturnList = Instance.new("Frame")
+ReturnList.Name = "ReturnList"
+ReturnList.Size = UDim2.new(1, -18, 0, 66)
+ReturnList.Position = UDim2.new(0, 9, 0, 249)
+ReturnList.BackgroundColor3 = Color3.fromRGB(25, 28, 38)
+ReturnList.BorderSizePixel = 0
+ReturnList.Visible = false
+ReturnList.ZIndex = 30
+ReturnList.Parent = MainScroll
+
+local rll = Instance.new("UIListLayout")
+rll.SortOrder = Enum.SortOrder.LayoutOrder
+rll.Parent = ReturnList
+
+local function addReturnOption(textValue, order)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -4, 0, 31)
+    b.LayoutOrder = order
+    b.Text = textValue
+    b.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+    b.TextColor3 = Color3.fromRGB(245, 245, 250)
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 13
+    b.ZIndex = 31
+    b.Parent = ReturnList
+    setupTouchButton(b)
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = b
+
+    connectTap(b, function()
+        returnMode = textValue
+        ReturnBtn.Text = textValue .. "  ∨"
+        ReturnList.Visible = false
+    end)
+end
+
+addReturnOption("Start Position", 1)
+addReturnOption("Base", 2)
+
+connectTap(ReturnBtn, function()
+    EggList.Visible = false
+    EggPage.Visible = false
+    ReturnList.Visible = not ReturnList.Visible
+end)
+
+MainScroll.CanvasSize = UDim2.new(0, 0, 0, 305)
 
 local function setMovementLocked(locked)
     local player = LocalPlayer
@@ -341,170 +414,6 @@ local function setMovementLocked(locked)
     end
 end
 
-local AutoStealBtn = Instance.new("TextButton")
-setupTouchButton(AutoStealBtn)
-AutoStealBtn.Size = UDim2.new(0.85, 0, 0, 44)
-AutoStealBtn.Position = UDim2.new(0.075, 0, 0, 8)
-AutoStealBtn.Text = "Auto Steal | OFF"
-AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-AutoStealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-AutoStealBtn.Font = Enum.Font.SourceSansBold
-AutoStealBtn.TextSize = 15
-AutoStealBtn.Parent = MainScroll
-
-local AutoCorner = Instance.new("UICorner")
-AutoCorner.CornerRadius = UDim.new(0, 8)
-AutoCorner.Parent = AutoStealBtn
-
--- ==================== LOOP ====================
-local LoopBtn = Instance.new("TextButton")
-setupTouchButton(LoopBtn)
-LoopBtn.Name = "LoopBtn"
-LoopBtn.Size = UDim2.new(0.85, 0, 0, 44)
-LoopBtn.Position = UDim2.new(0.075, 0, 0, 64)
-LoopBtn.Text = "Loop | OFF"
-LoopBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-LoopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-LoopBtn.Font = Enum.Font.SourceSansBold
-LoopBtn.TextSize = 15
-LoopBtn.AutoButtonColor = true
-LoopBtn.Parent = MainScroll
-
-local LoopCorner = Instance.new("UICorner")
-LoopCorner.CornerRadius = UDim.new(0, 8)
-LoopCorner.Parent = LoopBtn
-
-local SelectLabel = Instance.new("TextLabel")
-SelectLabel.Size = UDim2.new(0.85, 0, 0, 24)
-SelectLabel.Position = UDim2.new(0.075, 0, 0, 218)
-SelectLabel.Text = "Select Egg Type"
-SelectLabel.TextXAlignment = Enum.TextXAlignment.Left
-SelectLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-SelectLabel.BackgroundTransparency = 1
-SelectLabel.Font = Enum.Font.SourceSansBold
-SelectLabel.TextSize = 14
-SelectLabel.Parent = MainScroll
-
-local SelectEggBtn = Instance.new("TextButton")
-setupTouchButton(SelectEggBtn)
-SelectEggBtn.Size = UDim2.new(0.85, 0, 0, 44)
-SelectEggBtn.Position = UDim2.new(0.075, 0, 0, 244)
-SelectEggBtn.Text = "All  ∨"
-SelectEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-SelectEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-SelectEggBtn.Font = Enum.Font.SourceSans
-SelectEggBtn.TextSize = 14
-SelectEggBtn.Parent = MainScroll
-
-local SelectCorner = Instance.new("UICorner")
-SelectCorner.CornerRadius = UDim.new(0, 8)
-SelectCorner.Parent = SelectEggBtn
-
-local ReturnLabel = Instance.new("TextLabel")
-ReturnLabel.Size = UDim2.new(0.85, 0, 0, 22)
-ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
-ReturnLabel.Text = "Return To"
-ReturnLabel.TextXAlignment = Enum.TextXAlignment.Left
-ReturnLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-ReturnLabel.BackgroundTransparency = 1
-ReturnLabel.Font = Enum.Font.SourceSansBold
-ReturnLabel.TextSize = 14
-ReturnLabel.Parent = MainScroll
-
-local ReturnBtn = Instance.new("TextButton")
-setupTouchButton(ReturnBtn)
-ReturnBtn.Size = UDim2.new(0.85, 0, 0, 44)
-ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
-ReturnBtn.Text = "Base  ∨"
-ReturnBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-ReturnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ReturnBtn.Font = Enum.Font.SourceSans
-ReturnBtn.TextSize = 14
-ReturnBtn.Parent = MainScroll
-
-local ReturnCorner = Instance.new("UICorner")
-ReturnCorner.CornerRadius = UDim.new(0, 8)
-ReturnCorner.Parent = ReturnBtn
-
--- Forward declaration: Return To uses EggList in its click handler.
-local EggList
-
-local ReturnList = Instance.new("Frame")
-ReturnList.Size = UDim2.new(0.85, 0, 0, 66)
-ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
-ReturnList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-ReturnList.BorderSizePixel = 0
-ReturnList.Visible = false
-ReturnList.ZIndex = 110
-ReturnList.Parent = MainScroll
-
-local ReturnLayout = Instance.new("UIListLayout")
-ReturnLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ReturnLayout.Parent = ReturnList
-
-local function addReturnOption(textValue, order)
-    local b = Instance.new("TextButton")
-        setupTouchButton(b)
-    b.Size = UDim2.new(1, -4, 0, 32)
-    b.LayoutOrder = order
-    b.Text = textValue
-    b.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    b.TextColor3 = Color3.fromRGB(255, 255, 255)
-    b.Font = Enum.Font.SourceSans
-    b.TextSize = 13
-    b.ZIndex = 111
-    b.Parent = ReturnList
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 5)
-    c.Parent = b
-    connectTap(b, function()
-        returnMode = textValue
-        ReturnBtn.Text = textValue .. "  ∨"
-        ReturnList.Visible = false
-    end)
-end
-addReturnOption("Start Position", 1)
-addReturnOption("Base", 2)
-
--- NEW SIMPLE MAIN UI:
--- Keep the old controls/logic alive, but hide them from the main panel.
-EspEggBtn.Visible = false
-SelectLabel.Visible = false
-SelectEggBtn.Visible = false
-ReturnLabel.Visible = false
-ReturnBtn.Visible = false
-ReturnList.Visible = false
-EggList.Visible = false
-
-MainScroll.CanvasSize = UDim2.new(0, 0, 0, 120)
-
-connectTap(ReturnBtn, function()
-    EggList.Visible = false
-    EggPage.Visible = false
-    MainScroll.CanvasPosition = Vector2.new(0, 0)
-    ReturnLabel.Position = UDim2.new(0.075, 0, 0, 295)
-    ReturnBtn.Position = UDim2.new(0.075, 0, 0, 320)
-    ReturnList.Position = UDim2.new(0.075, 0, 0, 320)
-    ReturnList.Visible = not ReturnList.Visible
-end)
-
-EggList = Instance.new("ScrollingFrame")
-EggList.Size = UDim2.new(0.85, 0, 0, 220)
-EggList.Position = UDim2.new(0.075, 0, 0, 280)
-EggList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-EggList.BorderSizePixel = 0
-EggList.Visible = false
-EggList.ZIndex = 200
-EggList.ScrollBarThickness = 6
-EggList.ClipsDescendants = true
-EggList.CanvasSize = UDim2.new(0, 0, 0, 0)
-EggList.Parent = MainScroll
-
-local ListLayout = Instance.new("UIListLayout")
-ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ListLayout.Parent = EggList
-
--- មុខងារតម្រង (Filter) រកតែ Egg ពិតប្រាកដ
 function isValidEgg(obj)
     -- Ride A Pet eggs live directly under Workspace.RenderedEggs.
     if not RenderedEggs or not obj:IsDescendantOf(RenderedEggs) then
@@ -1386,480 +1295,6 @@ local function resetExpiredEggTarget()
     cachedTargetEgg = nil
     cachedTargetAt = 0
     cachedEggExpireAt = 0
-end
-
-
--- ==================== EGG PAGE UI ====================
--- Shows every requested Egg in priority order, its current Egg Luck, and
--- its visible countdown. The list is refreshed periodically while the page
--- is open, so newly spawned Eggs appear without reopening the UI.
-
-local EggPageBtn = Instance.new("TextButton")
-setupTouchButton(EggPageBtn)
-EggPageBtn.Name = "EggPageBtn"
-EggPageBtn.Size = UDim2.new(0.85, 0, 0, 44)
-EggPageBtn.Position = UDim2.new(0.075, 0, 0, 370)
-EggPageBtn.Text = "Egg Page  >"
-EggPageBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-EggPageBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-EggPageBtn.Font = Enum.Font.SourceSansBold
-EggPageBtn.TextSize = 14
-EggPageBtn.Parent = MainScroll
-
-local EggPageCorner = Instance.new("UICorner")
-EggPageCorner.CornerRadius = UDim.new(0, 8)
-EggPageCorner.Parent = EggPageBtn
-
--- Separate Egg window: this is NOT a child of MainFrame.
-EggMainFrame = Instance.new("Frame")
-EggMainFrame.Active = true
-EggMainFrame.Name = "EggMainFrame"
-EggMainFrame.Size = UDim2.new(0, 210, 0, 280)
-EggMainFrame.Position = UDim2.new(0.5, -105, 0.5, 15)
-EggMainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
-EggMainFrame.BorderSizePixel = 0
-EggMainFrame.ClipsDescendants = true
-EggMainFrame.Visible = false
-EggMainFrame.ZIndex = 500
-EggMainFrame.Parent = ScreenGui
-
-local EggMainCorner = Instance.new("UICorner")
-EggMainCorner.CornerRadius = UDim.new(0, 12)
-EggMainCorner.Parent = EggMainFrame
-
-local EggMainStroke = Instance.new("UIStroke")
-EggMainStroke.Color = Color3.fromRGB(0, 200, 255)
-EggMainStroke.Thickness = 1.5
-EggMainStroke.Parent = EggMainFrame
-makeDraggable(EggMainFrame)
-
-local EggPage = Instance.new("Frame")
-EggPage.Name = "EggPage"
-EggPage.Size = UDim2.new(1, -12, 1, -44)
-EggPage.Position = UDim2.new(0, 6, 0, 38)
-EggPage.BackgroundTransparency = 1
-EggPage.BorderSizePixel = 0
-EggPage.Visible = true
-EggPage.ZIndex = 500
-EggPage.Parent = EggMainFrame
-
-local EggPageCorner2 = Instance.new("UICorner")
-EggPageCorner2.CornerRadius = UDim.new(0, 10)
-EggPageCorner2.Parent = EggPage
-
-local EggMainTitle = Instance.new("TextLabel")
-EggMainTitle.Size = UDim2.new(1, -50, 0, 34)
-EggMainTitle.Position = UDim2.new(0, 10, 0, 0)
-EggMainTitle.BackgroundTransparency = 1
-EggMainTitle.Text = "EGG PAGE"
-EggMainTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-EggMainTitle.Font = Enum.Font.SourceSansBold
-EggMainTitle.TextSize = 18
-EggMainTitle.TextXAlignment = Enum.TextXAlignment.Left
-EggMainTitle.ZIndex = 501
-EggMainTitle.Parent = EggMainFrame
-
-local EggMainClose = Instance.new("TextButton")
-setupTouchButton(EggMainClose)
-EggMainClose.Size = UDim2.new(0, 44, 0, 44)
-EggMainClose.Position = UDim2.new(1, -48, 0, 2)
-EggMainClose.Text = "X"
-EggMainClose.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-EggMainClose.TextColor3 = Color3.fromRGB(255, 255, 255)
-EggMainClose.Font = Enum.Font.SourceSansBold
-EggMainClose.TextSize = 14
-EggMainClose.ZIndex = 502
-EggMainClose.Parent = EggMainFrame
-
-local EggMainCloseCorner = Instance.new("UICorner")
-EggMainCloseCorner.CornerRadius = UDim.new(0, 6)
-EggMainCloseCorner.Parent = EggMainClose
-
-local EggPageTitle = Instance.new("TextLabel")
-EggPageTitle.Size = UDim2.new(1, -50, 0, 38)
-EggPageTitle.Position = UDim2.new(0, 12, 0, 0)
-EggPageTitle.BackgroundTransparency = 1
-EggPageTitle.Text = "🟢 LIVE | Priority"
-EggPageTitle.TextColor3 = Color3.fromRGB(0, 230, 255)
-EggPageTitle.Font = Enum.Font.SourceSansBold
-EggPageTitle.TextSize = 16
-EggPageTitle.TextXAlignment = Enum.TextXAlignment.Left
-EggPageTitle.ZIndex = 501
-EggPageTitle.Parent = EggPage
-
-local EggPageClose = Instance.new("TextButton")
-setupTouchButton(EggPageClose)
-
-ScreenGui.DescendantAdded:Connect(function(obj)
-    if obj:IsA("TextButton") then
-        setupTouchButton(obj)
-    end
-end)
-EggPageClose.Size = UDim2.new(0, 44, 0, 44)
-EggPageClose.Position = UDim2.new(1, -46, 0, 2)
-EggPageClose.Text = "X"
-EggPageClose.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-EggPageClose.TextColor3 = Color3.fromRGB(255, 255, 255)
-EggPageClose.Font = Enum.Font.SourceSansBold
-EggPageClose.TextSize = 14
-EggPageClose.ZIndex = 501
-EggPageClose.Visible = false
-EggPageClose.Parent = EggPage
-
-local EggPageCloseCorner = Instance.new("UICorner")
-EggPageCloseCorner.CornerRadius = UDim.new(0, 6)
-EggPageCloseCorner.Parent = EggPageClose
-
-local EggPageList = Instance.new("ScrollingFrame")
-EggPageList.Name = "EggList"
-EggPageList.Size = UDim2.new(1, -16, 1, -42)
-EggPageList.Position = UDim2.new(0, 8, 0, 38)
-EggPageList.BackgroundTransparency = 1
-EggPageList.BorderSizePixel = 0
-EggPageList.ScrollBarThickness = 5
-EggPageList.CanvasSize = UDim2.new(0, 0, 0, 0)
-EggPageList.ZIndex = 501
-EggPageList.Parent = EggPage
-
-local EggPageLayout = Instance.new("UIListLayout")
-EggPageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-EggPageLayout.Padding = UDim.new(0, 3)
-EggPageLayout.Parent = EggPageList
-
-local RequestedEggNames = {
-    "White Egg",
-    "Brown Egg",
-    "Cracked Egg",
-    "Easter Egg",
-    "Stone Egg",
-    "Leaf Egg",
-    "Mushroom Egg",
-    "Flower Egg",
-    "Slime Egg",
-    "Ice Egg",
-    "Glass Egg",
-    "Golden Egg",
-    "Crystal Egg",
-    "Skull Egg",
-    "Dominus Egg",
-    "Flaming Egg",
-    "Sinister Egg",
-    "Soul Egg",
-    "Aurora Egg",
-    "Galaxy Egg",
-    "Black Hole Egg",
-    "Cherub Egg",
-}
-
-local function formatEggCountdown(seconds)
-    if seconds == nil then return "--:--" end
-    seconds = math.max(0, math.floor(seconds + 0.5))
-
-    local h = math.floor(seconds / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    local sec = seconds % 60
-
-    if h > 0 then
-        return string.format("%02d:%02d:%02d", h, m, sec)
-    end
-
-    return string.format("%02d:%02d", m, sec)
-end
-
-local function findLiveEggByName(name)
-    local found = nil
-    local foundLuck = -1
-    local seen = {}
-
-    local function inspectContainer(container)
-        if not container then return end
-
-        for _, egg in ipairs(container:GetChildren()) do
-            if not seen[egg] then
-                seen[egg] = true
-                if egg:IsA("Model") and egg.Name:lower() == name:lower() then
-                    local luck = getEggLuck(egg)
-                    if luck > foundLuck then
-                        found = egg
-                        foundLuck = luck
-                    end
-                end
-            end
-        end
-    end
-
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-    inspectContainer(RenderedEggs)
-
-    local map = Workspace:FindFirstChild("Map")
-    if map then
-        for _, containerName in ipairs({
-            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
-            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
-        }) do
-            inspectContainer(map:FindFirstChild(containerName, true))
-        end
-    end
-
-    return found
-end
-
-local function clearEggPageRows()
-    for _, child in ipairs(EggPageList:GetChildren()) do
-        if child:IsA("TextLabel") then
-            child:Destroy()
-        end
-    end
-end
-
-local function refreshEggPage()
-    if not EggPage.Visible then return end
-
-    clearEggPageRows()
-
-    -- LIVE Egg types only, in the fixed priority order.
-    -- If the same Egg type exists multiple times, combine them into one row
-    -- and show the amount, e.g. "🟢 Slime Egg x3 | 00:25".
-    local priority = {}
-    for index, name in ipairs(RequestedEggNames) do
-        priority[name:lower()] = index
-    end
-
-    local grouped = {}
-    local seen = {}
-
-    local function collect(container)
-        if not container then return end
-
-        for _, egg in ipairs(container:GetChildren()) do
-            if egg:IsA("Model") and not seen[egg] then
-                local key = egg.Name:lower()
-                local order = priority[key]
-
-                if order then
-                    seen[egg] = true
-
-                    local group = grouped[key]
-                    if not group then
-                        group = {
-                            name = egg.Name,
-                            order = order,
-                            count = 0,
-                            countdowns = {},
-                            target = false,
-                        }
-                        grouped[key] = group
-                    end
-
-                    group.count += 1
-
-                    local countdown = parseEggCountdown(egg)
-                    if countdown ~= nil then
-                        table.insert(group.countdowns, countdown)
-                    end
-
-                    if cachedTargetEgg == egg then
-                        group.target = true
-                    end
-                end
-            end
-        end
-    end
-
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-    collect(RenderedEggs)
-
-    local map = Workspace:FindFirstChild("Map")
-    if map then
-        for _, containerName in ipairs({
-            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
-            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
-        }) do
-            collect(map:FindFirstChild(containerName, true))
-        end
-    end
-
-    local live = {}
-    for _, group in pairs(grouped) do
-        -- Display the shortest countdown for the type. This makes the UI show
-        -- the Egg type that will expire/reset first.
-        local nextCountdown = nil
-        for _, value in ipairs(group.countdowns) do
-            if nextCountdown == nil or value < nextCountdown then
-                nextCountdown = value
-            end
-        end
-
-        group.countdown = nextCountdown
-        table.insert(live, group)
-    end
-
-    table.sort(live, function(a, b)
-        if a.order ~= b.order then
-            return a.order < b.order
-        end
-        return a.name < b.name
-    end)
-
-    for index, row in ipairs(live) do
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -4, 0, 29)
-        label.LayoutOrder = index
-        label.BackgroundColor3 = row.target
-            and Color3.fromRGB(0, 95, 70)
-            or Color3.fromRGB(35, 35, 48)
-        label.BorderSizePixel = 0
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.Font = row.target and Enum.Font.SourceSansBold or Enum.Font.SourceSans
-        label.TextSize = 13
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 502
-
-        local countdown = formatEggCountdown(row.countdown)
-        local targetMark = row.target and "  ★" or ""
-
-        local baseText = string.format(
-            "#%02d  🟢 %s x%d%s",
-            index,
-            row.name,
-            row.count,
-            targetMark
-        )
-
-        label.Text = baseText .. "  |  " .. countdown
-
-        if row.countdown ~= nil then
-            label:SetAttribute("EggPageCountdown", true)
-            label:SetAttribute("EggPageBaseText", baseText)
-            label:SetAttribute("EggPageExpireAt", os.clock() + row.countdown)
-        end
-
-        local pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 6)
-        pad.Parent = label
-
-        label.Parent = EggPageList
-    end
-
-    if #live == 0 then
-        local empty = Instance.new("TextLabel")
-        empty.Size = UDim2.new(1, -4, 0, 32)
-        empty.LayoutOrder = 1
-        empty.BackgroundTransparency = 1
-        empty.Text = "🟡 No Egg LIVE"
-        empty.TextColor3 = Color3.fromRGB(200, 200, 210)
-        empty.Font = Enum.Font.SourceSans
-        empty.TextSize = 14
-        empty.ZIndex = 502
-        empty.Parent = EggPageList
-    end
-
-    EggPageList.CanvasSize = UDim2.new(0, 0, 0, math.max(#live, 1) * 32)
-end
-
--- EGG PAGE: event-driven only.
--- No Map scanning loop. The page updates only when an Egg is added/removed.
-local eggPageConnections = {}
-
-local function eggPageSignalUpdate()
-    if EggPage.Visible then
-        task.defer(function()
-            if EggPage.Visible then
-                refreshEggPage()
-            end
-        end)
-    end
-end
-
-local function watchEggPageContainer(container)
-    if not container then return end
-
-    if eggPageConnections[container] then return end
-
-    local connections = {}
-    connections.added = container.ChildAdded:Connect(function(child)
-        -- New Egg spawned.
-        task.defer(function()
-            if child and child.Parent then
-                eggPageSignalUpdate()
-            end
-        end)
-    end)
-
-    connections.removed = container.ChildRemoved:Connect(function(child)
-        -- Egg disappeared/despawned.
-        eggPageSignalUpdate()
-    end)
-
-    eggPageConnections[container] = connections
-end
-
-local function setupEggPageSpawnWatchers()
-    -- Only attach listeners to known Egg containers.
-    -- We do not enumerate/scan their descendants.
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-    watchEggPageContainer(RenderedEggs)
-
-    local map = Workspace:FindFirstChild("Map")
-    if map then
-        for _, containerName in ipairs({
-            "Eggs", "RenderedEggs", "MapEggs", "WorldEggs",
-            "EggSpawns", "EggSpawn", "EggsFolder", "EggModels"
-        }) do
-            watchEggPageContainer(map:FindFirstChild(containerName, true))
-        end
-    end
-end
-
-setupEggPageSpawnWatchers()
-
--- If a container itself is created later, attach to it once.
-Workspace.ChildAdded:Connect(function(child)
-    if child.Name == "RenderedEggs" then
-        watchEggPageContainer(child)
-        eggPageSignalUpdate()
-    elseif child.Name == "Map" then
-        task.defer(function()
-            setupEggPageSpawnWatchers()
-            eggPageSignalUpdate()
-        end)
-    end
-end)
-
-
-local function openEggMainFrame()
-    -- Egg UI is a separate window, but it does NOT hide/close the OLIVER MainFrame.
-    EggMainFrame.Visible = true
-    EggList.Visible = false
-    ReturnList.Visible = false
-    EggPage.Visible = true
-    refreshEggPage()
-end
-
-local function closeEggMainFrame()
-    EggMainFrame.Visible = false
-end
-
--- Open the separate Egg UI directly from the OLIVER UI.
-connectTap(EggPageBtn, openEggMainFrame)
-
--- X only closes the Egg UI; OLIVER MainFrame stays open.
-connectTap(EggMainClose, closeEggMainFrame)
-
-task.spawn(function()
-    while ScreenGui.Parent do
-        if EggPage.Visible then
-            refreshEggPage()
-        end
-        task.wait(0.5)
-    end
-end)
-
-local cachedTargetEgg = nil
-local cachedTargetAt = 0
-local TARGET_SCAN_INTERVAL = 0.35
-
--- Wake Auto Steal immediately when a new Egg is inserted into a watched
 -- container. The small periodic fallback below is kept only for games that
 -- do not fire ChildAdded for their final Egg state.
 local eggSpawnEvent = Instance.new("BindableEvent")
@@ -2181,223 +1616,31 @@ end
 
 connectTap(AutoStealBtn, toggleAutoSteal)
 
-LocalPlayer.CharacterAdded:Connect(function(char)
-    if not autoSteal then return end
-    task.wait(0.15)
-    setMovementLocked(true)
+
+-- ==================== STATUS / STARTUP ====================
+
+local function updateStatus()
+    if loopSteal then
+        Status.Text = "LOOP"
+        Status.TextColor3 = Color3.fromRGB(0, 220, 130)
+    elseif autoSteal then
+        Status.Text = "STEAL"
+        Status.TextColor3 = Color3.fromRGB(0, 210, 255)
+    else
+        Status.Text = "IDLE"
+        Status.TextColor3 = Color3.fromRGB(150, 155, 165)
+    end
+end
+
+-- Keep the visible status synchronized with the automation state.
+task.spawn(function()
+    while ScreenGui.Parent do
+        updateStatus()
+        task.wait(0.15)
+    end
 end)
 
--- ==================== ADVANCED & CLEAN ESP SYSTEM ====================
-local isEspEgg = false
-local activeESP = {}
-local updateConnection
-local addedConnection
+updateEggTypeButtonText()
+updateStatus()
 
-local function removeESP()
-    for obj, data in pairs(activeESP) do
-        if data.Highlight then data.Highlight:Destroy() end
-        if data.Billboard then data.Billboard:Destroy() end
-    end
-    activeESP = {}
-
-    if updateConnection then updateConnection:Disconnect() updateConnection = nil end
-    if addedConnection then addedConnection:Disconnect() addedConnection = nil end
-end
-
-
-local function createESPForObject(obj)
-    if not isEspEgg then return end
-    if activeESP[obj] or not isValidEgg(obj) then return end
-
-    local primaryPart
-    if obj:IsA("Model") then
-        -- Exact Ride A Pet structure uses Handle for the egg's world position.
-        primaryPart = obj:FindFirstChild("Handle")
-            or obj.PrimaryPart
-            or obj:FindFirstChildWhichIsA("BasePart", true)
-    elseif obj:IsA("BasePart") then
-        primaryPart = obj
-    else
-        return
-    end
-    if not primaryPart then return end
-
-    -- 1. Highlight
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "Oliver_EggHighlight"
-    highlight.Adornee = obj
-    highlight.FillColor = Color3.fromRGB(255, 170, 0)
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.4
-    highlight.OutlineTransparency = 0
-    highlight.Parent = obj
-
-    -- 2. Billboard Label (ចេញតែ ១ គត់)
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "Oliver_EggName"
-    billboard.Adornee = primaryPart
-    billboard.Size = UDim2.new(0, 200, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Parent = obj
-
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, 0, 1, 0)
-    textLabel.Text = "🥚 " .. obj.Name .. " [0m]"
-    textLabel.TextColor3 = Color3.fromRGB(255, 220, 50)
-    textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    textLabel.TextStrokeTransparency = 0
-    textLabel.Font = Enum.Font.SourceSansBold
-    textLabel.TextSize = 14
-    textLabel.BackgroundTransparency = 1
-    textLabel.Parent = billboard
-
-    activeESP[obj] = {
-        Highlight = highlight,
-        Billboard = billboard,
-        TextLabel = textLabel,
-        Part = primaryPart
-    }
-end
-
-local function applyESP()
-    removeESP()
-    if not isEspEgg then return end
-
-    -- Scan only the game's actual egg container.
-    -- This avoids unrelated BillboardGuis/objects elsewhere in Workspace.
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-
-    if RenderedEggs then
-        for _, obj in ipairs(RenderedEggs:GetChildren()) do
-            createESPForObject(obj)
-        end
-
-        -- Catch newly spawned eggs immediately.
-        addedConnection = RenderedEggs.ChildAdded:Connect(function(obj)
-            if not isEspEgg then return end
-
-            task.spawn(function()
-                for _ = 1, 8 do
-                    if not isEspEgg then return end
-
-                    createESPForObject(obj)
-
-                    if activeESP[obj] then
-                        return
-                    end
-
-                    task.wait(0.1)
-                end
-            end)
-        end)
-    else
-        -- Folder may be created after the script starts.
-        addedConnection = Workspace.ChildAdded:Connect(function(obj)
-            if obj.Name ~= "RenderedEggs" then return end
-            RenderedEggs = obj
-
-            if not isEspEgg then return end
-
-            for _, egg in ipairs(RenderedEggs:GetChildren()) do
-                createESPForObject(egg)
-            end
-
-            if addedConnection then
-                addedConnection:Disconnect()
-            end
-
-            addedConnection = RenderedEggs.ChildAdded:Connect(function(egg)
-                if isEspEgg then
-                    task.wait(0.1)
-                    createESPForObject(egg)
-                end
-            end)
-        end)
-    end
-
-    -- ==================== REAL-TIME DISTANCE ====================
-    -- ប្រើ GetPivot() សម្រាប់ Model ដើម្បីកុំឲ្យ distance នៅ [0m]
-    -- ប្រសិនបើ Egg មិនមាន PrimaryPart ឬ Character ទើប spawn មិនទាន់រួច។
-    local function getWorldPosition(instance)
-        if not instance or not instance.Parent then
-            return nil
-        end
-
-        if instance:IsA("BasePart") then
-            return instance.Position
-        end
-
-        if instance:IsA("Model") then
-            -- Ride A Pet egg structure: <Egg Model>.Handle
-            local handle = instance:FindFirstChild("Handle")
-            if handle and handle:IsA("BasePart") then
-                return handle.Position
-            end
-
-            local ok, pivot = pcall(function()
-                return instance:GetPivot()
-            end)
-
-            if ok and pivot then
-                return pivot.Position
-            end
-        end
-
-        return nil
-    end
-
-    updateConnection = RunService.RenderStepped:Connect(function()
-        local char = LocalPlayer.Character
-        local playerPos = getWorldPosition(char)
-
-        for obj, data in pairs(activeESP) do
-            if not obj or not obj.Parent then
-                if data.Highlight then data.Highlight:Destroy() end
-                if data.Billboard then data.Billboard:Destroy() end
-                activeESP[obj] = nil
-            else
-                -- យកទីតាំងពី Egg Model ផ្ទាល់ជាមុន
-                local eggPos = getWorldPosition(obj)
-
-                -- Fallback ទៅ Part ដែលបានរកឃើញពេលបង្កើត ESP
-                if not eggPos then
-                    eggPos = getWorldPosition(data.Part)
-                end
-
-                if playerPos and eggPos then
-                    local dist = math.floor((playerPos - eggPos).Magnitude + 0.5)
-                    data.TextLabel.Text = string.format(
-                        "🥚 %s [%dm]",
-                        obj.Name,
-                        dist
-                    )
-                elseif data.Part and data.Part.Parent then
-                    -- Part អាចមានតែបន្ទាប់ពី Model spawn រួច
-                    local partPos = getWorldPosition(data.Part)
-                    if playerPos and partPos then
-                        local dist = math.floor((playerPos - partPos).Magnitude + 0.5)
-                        data.TextLabel.Text = string.format(
-                            "🥚 %s [%dm]",
-                            obj.Name,
-                            dist
-                        )
-                    end
-                end
-            end
-        end
-    end)
-end
-
-connectTap(EspEggBtn, function()
-    isEspEgg = not isEspEgg
-    if isEspEgg then
-        EspEggBtn.Text = "ESP EGG | ON"
-        EspEggBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
-        applyESP()
-    else
-        EspEggBtn.Text = "ESP EGG | OFF"
-        EspEggBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-        removeESP()
-    end
-end)
+print("[OLIVER] New standalone mobile UI loaded.")
