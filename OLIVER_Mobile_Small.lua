@@ -381,6 +381,8 @@ local speedEnabled = false
 local SPEED_VALUE = 600
 local speedConnection = nil
 local speedCharacterConnection = nil
+local speedOriginalWalkSpeed = nil
+local speedOriginalCharacter = nil
 
 local function applySpeed()
     if not speedEnabled then return end
@@ -398,6 +400,15 @@ end
 local function stopSpeed()
     speedEnabled = false
 
+    -- Restore the normal WalkSpeed that was active before SPEED was enabled.
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid and speedOriginalWalkSpeed ~= nil then
+        pcall(function()
+            humanoid.WalkSpeed = speedOriginalWalkSpeed
+        end)
+    end
+
     if speedConnection then
         speedConnection:Disconnect()
         speedConnection = nil
@@ -410,10 +421,22 @@ local function stopSpeed()
 
     SpeedBtn.Text = "SPEED | OFF"
     SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+    speedOriginalWalkSpeed = nil
+    speedOriginalCharacter = nil
 end
 
 local function startSpeed()
-    stopSpeed()
+    -- Capture the current normal speed before forcing 600.
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        speedOriginalWalkSpeed = humanoid.WalkSpeed
+        speedOriginalCharacter = character
+    else
+        speedOriginalWalkSpeed = nil
+        speedOriginalCharacter = nil
+    end
+
     speedEnabled = true
 
     SpeedBtn.Text = "SPEED | 600"
@@ -429,6 +452,10 @@ local function startSpeed()
         task.defer(function()
             local humanoid = character:WaitForChild("Humanoid", 8)
             if speedEnabled and humanoid then
+                -- A respawn can have a different normal WalkSpeed, so capture it
+                -- before applying the forced speed to this new character.
+                speedOriginalWalkSpeed = humanoid.WalkSpeed
+                speedOriginalCharacter = character
                 pcall(function()
                     humanoid.WalkSpeed = SPEED_VALUE
                 end)
