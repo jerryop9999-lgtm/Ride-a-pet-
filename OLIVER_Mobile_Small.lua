@@ -10,7 +10,7 @@
       • Fast direct flight/teleport to Egg
       • Confirm pickup before returning
       • Return to player's Base
-      • Fixed 22-Egg pickup priority
+      • Fixed 23-Egg pickup priority
       • Separate "Egg in Map" panel, OFF by default
       • One-finger mobile touch
 ]]
@@ -246,6 +246,8 @@ HoldLabel.TextXAlignment = Enum.TextXAlignment.Left
 HoldLabel.Parent = Content
 
 
+local ESPEggBtn = makeMainButton("ESPEgg", "ESP EGG | OFF", 94, 34)
+
 local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 133, 43)
 
 local Info = Instance.new("TextLabel")
@@ -367,6 +369,9 @@ local stealBusy = false
 local autoStealStartCFrame = nil
 local capturedReturnBaseCFrame = nil
 local holdTime = 0.0
+local espEggEnabled = false
+local espEggFolder = nil
+local espEggConnection = nil
 
 local movementLock = {
     controls = nil,
@@ -376,9 +381,9 @@ local movementLock = {
     autoRotate = nil,
 }
 
--- Exactly 22 Eggs, in the order Auto Steal checks them.
--- Researched named 22-egg ladder.
--- The current community table documents these 22 named eggs.
+-- Exactly 23 Eggs, in the order Auto Steal checks them.
+-- Researched named 23-egg ladder.
+-- The current community table documents these 23 named eggs.
 -- The separate 90K and 500K luck rows are intentionally NOT invented/named.
 local EggPriority = {
     "White Egg",       -- 1 Luck
@@ -402,6 +407,7 @@ local EggPriority = {
     "Aurora Egg",      -- 300,000,000 Luck
     "Galaxy Egg",      -- 1,500,000,000 Luck
     "Black Hole Egg",  -- 100,000,000,000 Luck
+    "Solaris Egg",     -- 300,000,000,000 Luck
     "Cherub Egg",      -- 1,000,000,000,000 Luck
 }
 
@@ -427,6 +433,7 @@ local EggRarity = {
     ["Aurora Egg"] = "Divine",
     ["Galaxy Egg"] = "Divine",
     ["Black Hole Egg"] = "Ethereal",
+    ["Solaris Egg"] = "Ethereal",
     ["Cherub Egg"] = "Ethereal",
 }
 
@@ -436,6 +443,236 @@ connectTap(MapPanelBtn, function()
     MapPanelBtn.BackgroundColor3 = MapFrame.Visible
         and Color3.fromRGB(0, 120, 80)
         or Color3.fromRGB(40, 43, 55)
+end)
+
+-- =========================================================
+-- EGG ESP
+-- =========================================================
+
+local function getEggImageAsset(egg)
+    if not egg then return "" end
+
+    local function normalize(value)
+        if value == nil then return "" end
+        local v = tostring(value)
+        if v == "" then return "" end
+        if v:match("^%d+$") then
+            return "rbxassetid://" .. v
+        end
+        if v:find("rbxasset", 1, true) or v:find("://", 1, true) then
+            return v
+        end
+        return ""
+    end
+
+    local attrs = {"Image", "ImageId", "Icon", "IconId", "Texture", "TextureId", "Thumbnail", "ThumbnailId"}
+    for _, key in ipairs(attrs) do
+        local value = normalize(egg:GetAttribute(key))
+        if value ~= "" then return value end
+    end
+
+    for _, obj in ipairs(egg:GetDescendants()) do
+        if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+            local value = normalize(obj.Image)
+            if value ~= "" then return value end
+        elseif obj:IsA("Decal") or obj:IsA("Texture") then
+            local value = normalize(obj.Texture)
+            if value ~= "" then return value end
+        elseif obj:IsA("StringValue") then
+            local n = obj.Name:lower()
+            if n:find("image", 1, true) or n:find("icon", 1, true)
+                or n:find("texture", 1, true) or n:find("thumbnail", 1, true) then
+                local value = normalize(obj.Value)
+                if value ~= "" then return value end
+            end
+        end
+    end
+
+    return ""
+end
+
+local function getESPPart(egg)
+    return getEggPart(egg)
+end
+
+local function formatESPDistance(distance)
+    if distance >= 1000 then
+        return string.format("%.1fk studs", distance / 1000)
+    end
+    return string.format("%d studs", math.floor(distance + 0.5))
+end
+
+local function createEggESP(egg)
+    if not egg or not egg.Parent then return nil end
+    local part = getESPPart(egg)
+    if not part then return nil end
+
+    local gui = Instance.new("BillboardGui")
+    gui.Name = "OLIVER_EggESP"
+    gui.Adornee = part
+    gui.AlwaysOnTop = true
+    gui.LightInfluence = 0
+    gui.MaxDistance = 5000
+    gui.Size = UDim2.new(0, 190, 0, 58)
+    gui.StudsOffset = Vector3.new(0, 3.2, 0)
+    gui.Parent = espEggFolder
+
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(15, 17, 24)
+    bg.BackgroundTransparency = 0.12
+    bg.BorderSizePixel = 0
+    bg.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = bg
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = Color3.fromRGB(75, 120, 255)
+    stroke.Transparency = 0.15
+    stroke.Parent = bg
+
+    local image = Instance.new("ImageLabel")
+    image.Name = "EggImage"
+    image.BackgroundTransparency = 1
+    image.Position = UDim2.new(0, 5, 0, 5)
+    image.Size = UDim2.new(0, 48, 0, 48)
+    image.ScaleType = Enum.ScaleType.Fit
+    image.Parent = bg
+
+    local asset = getEggImageAsset(egg)
+    if asset ~= "" then
+        image.Image = asset
+    else
+        -- Keep the image area visible even when the Egg has no exposed image asset.
+        image.Image = ""
+        image.BackgroundTransparency = 0
+        image.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
+    end
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "EggName"
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Position = UDim2.new(0, 60, 0, 5)
+    nameLabel.Size = UDim2.new(1, -66, 0, 23)
+    nameLabel.Text = egg.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 15
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLabel.Parent = bg
+
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Name = "Distance"
+    distanceLabel.BackgroundTransparency = 1
+    distanceLabel.Position = UDim2.new(0, 60, 0, 29)
+    distanceLabel.Size = UDim2.new(1, -66, 0, 20)
+    distanceLabel.Text = "0 studs"
+    distanceLabel.TextColor3 = Color3.fromRGB(120, 210, 255)
+    distanceLabel.Font = Enum.Font.SourceSans
+    distanceLabel.TextSize = 13
+    distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+    distanceLabel.Parent = bg
+
+    return {gui = gui, egg = egg, part = part, distance = distanceLabel, nameLabel = nameLabel}
+end
+
+local function destroyEggESP()
+    if espEggConnection then
+        espEggConnection:Disconnect()
+        espEggConnection = nil
+    end
+    if espEggFolder then
+        espEggFolder:Destroy()
+        espEggFolder = nil
+    end
+end
+
+local function stopEggESP()
+    espEggEnabled = false
+    destroyEggESP()
+    ESPEggBtn.Text = "ESP EGG | OFF"
+    ESPEggBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+end
+
+local function startEggESP()
+    destroyEggESP()
+    espEggEnabled = true
+
+    espEggFolder = Instance.new("Folder")
+    espEggFolder.Name = "OLIVER_EggESP"
+    espEggFolder.Parent = Workspace
+
+    ESPEggBtn.Text = "ESP EGG | ON"
+    ESPEggBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+
+    local entries = {}
+    local lastScan = 0
+
+    espEggConnection = RunService.RenderStepped:Connect(function()
+        if not espEggEnabled or not ScreenGui.Parent then
+            return
+        end
+
+        local character = LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+
+        if not root or not RenderedEggs then
+            return
+        end
+
+        if os.clock() - lastScan >= 0.15 then
+            lastScan = os.clock()
+
+            local alive = {}
+            for _, egg in ipairs(RenderedEggs:GetChildren()) do
+                if egg:IsA("Model") and isValidEgg(egg) then
+                    alive[egg] = true
+                    if not entries[egg] then
+                        local entry = createEggESP(egg)
+                        if entry then entries[egg] = entry end
+                    end
+                end
+            end
+
+            for egg, entry in pairs(entries) do
+                if not alive[egg] or not egg.Parent or not egg:IsDescendantOf(RenderedEggs) then
+                    if entry.gui then entry.gui:Destroy() end
+                    entries[egg] = nil
+                end
+            end
+        end
+
+        for egg, entry in pairs(entries) do
+            if entry.gui and entry.gui.Parent then
+                local part = getESPPart(egg)
+                if part then
+                    entry.part = part
+                    entry.gui.Adornee = part
+                    entry.distance.Text = formatESPDistance((part.Position - root.Position).Magnitude)
+                    entry.nameLabel = entry.nameLabel or entry.gui:FindFirstChild("EggName", true)
+                    if entry.nameLabel then entry.nameLabel.Text = egg.Name end
+                else
+                    entry.gui:Destroy()
+                    entries[egg] = nil
+                end
+            else
+                entries[egg] = nil
+            end
+        end
+    end)
+end
+
+connectTap(ESPEggBtn, function()
+    if espEggEnabled then
+        stopEggESP()
+    else
+        startEggESP()
+    end
 end)
 
 -- =========================================================
@@ -911,7 +1148,7 @@ local RarityPriority = {
 
 
 -- =========================================================
--- FIXED 22-EGG TARGET FINDER
+-- 23-EGG TARGET FINDER
 -- =========================================================
 
 local function isValidEgg(obj)
@@ -1417,6 +1654,8 @@ Status.Text = "OFF"
 Status.TextColor3 = Color3.fromRGB(0, 210, 255)
 MapPanelBtn.Text = "Egg in Map | OFF"
 MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+ESPEggBtn.Text = "ESP EGG | OFF"
+ESPEggBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 
 -- All panels are independent. Main UI starts closed.
 MainFrame.Visible = false
