@@ -480,8 +480,8 @@ local movementLock = {
     autoRotate = nil,
 }
 
--- Exactly 23 Eggs, in the order Auto Steal checks them.
--- Researched named 23-egg ladder.
+-- Exactly 24 Eggs, in the order Auto Steal checks them.
+-- Updated named ladder with Volcanic Egg (2.5T Luck).
 -- The current community table documents these 23 named eggs.
 -- The separate 90K and 500K luck rows are intentionally NOT invented/named.
 local EggPriority = {
@@ -508,6 +508,7 @@ local EggPriority = {
     "Black Hole Egg",  -- 100,000,000,000 Luck
     "Solaris Egg",     -- 300,000,000,000 Luck
     "Cherub Egg",      -- 1,000,000,000,000 Luck
+    "Volcanic Egg",    -- 2,500,000,000,000 Luck
 }
 
 local EggRarity = {
@@ -1288,6 +1289,8 @@ local KnownEggLuck = {
     ["Blackhole Egg"] = 100000000000,
     ["Solaris Egg"] = 300000000000,
     ["Solaris"] = 300000000000,
+    ["Volcanic Egg"] = 2500000000000,
+    ["Volcanic"] = 2500000000000,
     ["Cherub Egg"] = 1000000000000,
 }
 
@@ -1787,34 +1790,54 @@ local function refreshMapPanel()
     if RenderedEggs then
         for _, egg in ipairs(RenderedEggs:GetChildren()) do
             if egg:IsA("Model") and isValidEgg(egg) then
-                found[egg.Name] = (found[egg.Name] or 0) + 1
+                local key = egg.Name
+                found[key] = (found[key] or 0) + 1
             end
         end
     end
 
+    local entries = {}
+    for eggName, count in pairs(found) do
+        local luck = KnownEggLuck[eggName]
+        if not luck then
+            local lower = eggName:lower()
+            for knownName, knownLuck in pairs(KnownEggLuck) do
+                if lower == knownName:lower() then
+                    luck = knownLuck
+                    break
+                end
+            end
+        end
+        luck = luck or 0
+        table.insert(entries, {name = eggName, count = count, luck = luck})
+    end
+
+    table.sort(entries, function(a, b)
+        if a.luck ~= b.luck then
+            return a.luck > b.luck
+        end
+        return a.name:lower() < b.name:lower()
+    end)
+
     local rowOrder = 0
 
-    for index, eggName in ipairs(EggPriority) do
-        local count = found[eggName] or 0
+    for _, entry in ipairs(entries) do
+        rowOrder += 1
 
-        if count > 0 then
-            rowOrder += 1
+        local row = Instance.new("TextLabel")
+        row.Size = UDim2.new(1, -4, 0, 27)
+        row.LayoutOrder = rowOrder
+        row.BackgroundColor3 = Color3.fromRGB(31, 34, 45)
+        row.TextColor3 = Color3.fromRGB(235, 238, 245)
+        row.Font = Enum.Font.SourceSans
+        row.TextSize = 13
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.Text = string.format("%02d  %s  ×%d", rowOrder, entry.name, entry.count)
+        row.Parent = MapScroll
 
-            local row = Instance.new("TextLabel")
-            row.Size = UDim2.new(1, -4, 0, 27)
-            row.LayoutOrder = rowOrder
-            row.BackgroundColor3 = Color3.fromRGB(31, 34, 45)
-            row.TextColor3 = Color3.fromRGB(235, 238, 245)
-            row.Font = Enum.Font.SourceSans
-            row.TextSize = 13
-            row.TextXAlignment = Enum.TextXAlignment.Left
-            row.Text = string.format("%02d  %s  ×%d", index, eggName, count)
-            row.Parent = MapScroll
-
-            local c = Instance.new("UICorner")
-            c.CornerRadius = UDim.new(0, 6)
-            c.Parent = row
-        end
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 6)
+        c.Parent = row
     end
 
     if rowOrder == 0 then
