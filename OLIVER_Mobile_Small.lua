@@ -546,10 +546,17 @@ local function createEggESP(egg)
     if asset ~= "" then
         image.Image = asset
     else
-        -- Keep the image area visible even when the Egg has no exposed image asset.
+        -- Keep a visible Egg image area even when the model does not expose an asset id.
         image.Image = ""
         image.BackgroundTransparency = 0
         image.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
+        local placeholder = Instance.new("TextLabel")
+        placeholder.Name = "EggImagePlaceholder"
+        placeholder.Size = UDim2.new(1, 0, 1, 0)
+        placeholder.BackgroundTransparency = 1
+        placeholder.Text = "🥚"
+        placeholder.TextSize = 25
+        placeholder.Parent = image
     end
 
     local nameLabel = Instance.new("TextLabel")
@@ -1430,7 +1437,7 @@ local function stealOneEgg(egg)
         Status.Text = "RETURN"
         local returned = returnAfterSuccess()
         if returned then
-            task.wait(0.25)
+            task.wait(2)
         end
         resetExpiredEggTarget()
     else
@@ -1498,7 +1505,7 @@ local function stealOneEgg(egg)
     if taken and autoSteal then
         Status.Text = "RETURN"
         local returned = returnAfterSuccess()
-        if returned then task.wait(0.25) end
+        if returned then task.wait(2) end
         resetExpiredEggTarget()
     else
         -- Never return to Base unless the Egg was confirmed taken.
