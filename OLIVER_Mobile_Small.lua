@@ -607,13 +607,43 @@ local function getESPEggCandidate(obj, renderedRoot)
     return nil
 end
 
+local function getESPDisplayName(egg)
+    if not egg then return "" end
+
+    local ownName = tostring(egg.Name or "")
+    local ownLower = ownName:lower()
+
+    -- Never show internal container names such as EggBase.
+    if ownLower == "eggbase" or ownLower:find("eggbase", 1, true) then
+        -- Try to find the real Egg name inside the container.
+        for _, child in ipairs(egg:GetDescendants()) do
+            local childName = tostring(child.Name or "")
+            if ESPKnownEggNames[childName:lower()] then
+                return childName
+            end
+        end
+        return ""
+    end
+
+    if ESPKnownEggNames[ownLower] then
+        return ownName
+    end
+
+    -- Do not expose generic/internal names on the ESP.
+    if ownLower:find("egg", 1, true) then
+        return ""
+    end
+
+    return ownName
+end
+
 local function createEggESP(egg)
     local part = getESPPart(egg)
     if not part then return nil end
 
     local gui = Instance.new("BillboardGui")
     gui.Name = "OLIVER_EggESP"
-    gui.Size = UDim2.new(0, 175, 0, 50)
+    gui.Size = UDim2.new(0, 180, 0, 30)
     gui.StudsOffset = Vector3.new(0, 3.1, 0)
     gui.AlwaysOnTop = true
     gui.MaxDistance = 10000
@@ -621,47 +651,38 @@ local function createEggESP(egg)
     gui.Adornee = part
     gui.Parent = espEggFolder
 
-    local bg = Instance.new("Frame")
-    bg.Size = UDim2.new(1, 0, 1, 0)
-    bg.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
-    bg.BackgroundTransparency = 0.18
-    bg.BorderSizePixel = 0
-    bg.Parent = gui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = bg
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1
-    stroke.Color = Color3.fromRGB(65, 165, 255)
-    stroke.Transparency = 0.15
-    stroke.Parent = bg
-
+    -- No Frame/background: the ESP is text-only.
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "EggName"
     nameLabel.BackgroundTransparency = 1
-    nameLabel.Position = UDim2.new(0, 8, 0, 3)
-    nameLabel.Size = UDim2.new(1, -16, 0, 21)
-    nameLabel.Text = egg.Name
+    nameLabel.BorderSizePixel = 0
+    nameLabel.Size = UDim2.new(1, 0, 0, 17)
+    nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    nameLabel.Text = getESPDisplayName(egg)
     nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextStrokeTransparency = 0.15
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     nameLabel.Font = Enum.Font.SourceSansBold
     nameLabel.TextSize = 15
     nameLabel.TextXAlignment = Enum.TextXAlignment.Center
     nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    nameLabel.Parent = bg
+    nameLabel.Visible = nameLabel.Text ~= ""
+    nameLabel.Parent = gui
 
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.Name = "Distance"
     distanceLabel.BackgroundTransparency = 1
-    distanceLabel.Position = UDim2.new(0, 8, 0, 25)
-    distanceLabel.Size = UDim2.new(1, -16, 0, 20)
+    distanceLabel.BorderSizePixel = 0
+    distanceLabel.Position = nameLabel.Visible and UDim2.new(0, 0, 0, 15) or UDim2.new(0, 0, 0, 5)
+    distanceLabel.Size = UDim2.new(1, 0, 0, 20)
     distanceLabel.Text = "Distance: -- m"
     distanceLabel.TextColor3 = Color3.fromRGB(120, 210, 255)
-    distanceLabel.Font = Enum.Font.SourceSans
+    distanceLabel.TextStrokeTransparency = 0.15
+    distanceLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    distanceLabel.Font = Enum.Font.SourceSansBold
     distanceLabel.TextSize = 13
     distanceLabel.TextXAlignment = Enum.TextXAlignment.Center
-    distanceLabel.Parent = bg
+    distanceLabel.Parent = gui
 
     return {
         gui = gui,
