@@ -155,7 +155,7 @@ toggleCorner.Parent = ToggleBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 238, 0, 325)
+MainFrame.Size = UDim2.new(0, 238, 0, 330)
 MainFrame.Position = UDim2.new(0.5, -119, 0.5, -142)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MainFrame.BorderSizePixel = 0
@@ -250,11 +250,11 @@ local ESPEggBtn = makeMainButton("ESPEgg", "ESP EGG | OFF", 94, 34)
 
 local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 133, 43)
 
-local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 180, 34)
+local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 181, 43)
 
 local Info = Instance.new("TextLabel")
 Info.Size = UDim2.new(1, 0, 0, 42)
-Info.Position = UDim2.new(0, 0, 0, 220)
+Info.Position = UDim2.new(0, 0, 0, 229)
 Info.BackgroundTransparency = 1
 Info.Text = "Fast flight → Egg → confirm → Base"
 Info.TextColor3 = Color3.fromRGB(145, 150, 160)
@@ -372,11 +372,78 @@ local autoStealStartCFrame = nil
 local capturedReturnBaseCFrame = nil
 local holdTime = 0.0
 local espEggEnabled = false
-local speedEnabled = false
-local SPEED_VALUE = 600
-local speedCharacterConnection = nil
 local espEggFolder = nil
 local espEggConnection = nil
+
+-- SPEED
+-- Mobile-friendly toggle. Default is OFF; ON forces WalkSpeed 600.
+local speedEnabled = false
+local SPEED_VALUE = 600
+local speedConnection = nil
+local speedCharacterConnection = nil
+
+local function applySpeed()
+    if not speedEnabled then return end
+
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if humanoid then
+        pcall(function()
+            humanoid.WalkSpeed = SPEED_VALUE
+        end)
+    end
+end
+
+local function stopSpeed()
+    speedEnabled = false
+
+    if speedConnection then
+        speedConnection:Disconnect()
+        speedConnection = nil
+    end
+
+    if speedCharacterConnection then
+        speedCharacterConnection:Disconnect()
+        speedCharacterConnection = nil
+    end
+
+    SpeedBtn.Text = "SPEED | OFF"
+    SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+end
+
+local function startSpeed()
+    stopSpeed()
+    speedEnabled = true
+
+    SpeedBtn.Text = "SPEED | 600"
+    SpeedBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+
+    applySpeed()
+
+    speedConnection = RunService.Heartbeat:Connect(function()
+        applySpeed()
+    end)
+
+    speedCharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+        task.defer(function()
+            local humanoid = character:WaitForChild("Humanoid", 8)
+            if speedEnabled and humanoid then
+                pcall(function()
+                    humanoid.WalkSpeed = SPEED_VALUE
+                end)
+            end
+        end)
+    end)
+end
+
+connectTap(SpeedBtn, function()
+    if speedEnabled then
+        stopSpeed()
+    else
+        startSpeed()
+    end
+end)
 
 local movementLock = {
     controls = nil,
@@ -451,163 +518,113 @@ connectTap(MapPanelBtn, function()
 end)
 
 -- =========================================================
--- SPEED 600
--- =========================================================
-
-local function applySpeed()
-    local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if humanoid and speedEnabled then
-        humanoid.WalkSpeed = SPEED_VALUE
-    end
-end
-
-local function setSpeedEnabled(enabled)
-    speedEnabled = enabled and true or false
-
-    if speedEnabled then
-        applySpeed()
-        SpeedBtn.Text = "SPEED | 600"
-        SpeedBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
-    else
-        SpeedBtn.Text = "SPEED | OFF"
-        SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
-    end
-end
-
-connectTap(SpeedBtn, function()
-    setSpeedEnabled(not speedEnabled)
-end)
-
-if speedCharacterConnection then
-    speedCharacterConnection:Disconnect()
-end
-
-speedCharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
-    if speedEnabled then
-        local humanoid = character:WaitForChild("Humanoid", 8)
-        if humanoid then
-            task.wait(0.2)
-            if speedEnabled then
-                humanoid.WalkSpeed = SPEED_VALUE
-            end
-        end
-    end
-end)
-
--- =========================================================
 -- EGG ESP
+-- Robust Ride A Pet version:
+--   • scans ALL descendants under RenderedEggs
+--   • does NOT require a ProximityPrompt
+--   • catches reset/re-spawned Eggs automatically
+--   • removes entries when an Egg disappears
+--   • shows only Name + Distance for mobile performance
 -- =========================================================
 
-local function getEggImageAsset(egg)
-    if not egg then return "" end
+local function getESPPart(obj)
+    if not obj then return nil end
 
-    local function normalize(value)
-        if value == nil then return "" end
-        local v = tostring(value)
-        if v == "" then return "" end
-        if v:match("^%d+$") then
-            return "rbxassetid://" .. v
-        end
-        if v:find("rbxasset", 1, true) or v:find("://", 1, true) then
-            return v
-        end
-        return ""
+    if obj:IsA("BasePart") then
+        return obj
     end
 
-    local attrs = {"Image", "ImageId", "Icon", "IconId", "Texture", "TextureId", "Thumbnail", "ThumbnailId"}
-    for _, key in ipairs(attrs) do
-        local value = normalize(egg:GetAttribute(key))
-        if value ~= "" then return value end
-    end
-
-    for _, obj in ipairs(egg:GetDescendants()) do
-        if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-            local value = normalize(obj.Image)
-            if value ~= "" then return value end
-        elseif obj:IsA("Decal") or obj:IsA("Texture") then
-            local value = normalize(obj.Texture)
-            if value ~= "" then return value end
-        elseif obj:IsA("StringValue") then
-            local n = obj.Name:lower()
-            if n:find("image", 1, true) or n:find("icon", 1, true)
-                or n:find("texture", 1, true) or n:find("thumbnail", 1, true) then
-                local value = normalize(obj.Value)
-                if value ~= "" then return value end
-            end
+    if obj:IsA("Model") then
+        local handle = obj:FindFirstChild("Handle")
+        if handle and handle:IsA("BasePart") then
+            return handle
         end
+
+        if obj.PrimaryPart and obj.PrimaryPart:IsA("BasePart") then
+            return obj.PrimaryPart
+        end
+
+        return obj:FindFirstChildWhichIsA("BasePart", true)
     end
 
-    return ""
+    return obj:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function getESPPart(egg)
-    return getEggPart(egg)
+local ESPKnownEggNames = {}
+for _, eggName in ipairs(EggPriority) do
+    ESPKnownEggNames[eggName:lower()] = true
 end
 
--- ESP must NOT depend on ProximityPrompt.
--- Some Eggs render before their pickup prompt exists, and some servers
--- create the visual as a Model with the prompt added later.
-local function isESPValidEgg(obj)
-    if not obj or not obj.Parent then
-        return false
+local function looksLikeEggName(name)
+    if not name then return false end
+
+    local lower = tostring(name):lower()
+    if ESPKnownEggNames[lower] then
+        return true
     end
 
-    RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
-
-    if RenderedEggs and obj:IsDescendantOf(RenderedEggs) then
-        -- accepted
-    elseif obj:IsDescendantOf(Workspace) then
-        -- fallback for games that render Eggs outside RenderedEggs
-    else
-        return false
-    end
-
-    if not (obj:IsA("Model") or obj:IsA("BasePart")) then
-        return false
-    end
-
-    local lower = obj.Name:lower()
     if not lower:find("egg", 1, true) then
         return false
     end
 
+    -- Ignore common containers/markers that can contain the word "egg".
     if lower:find("spawn", 1, true)
+        or lower:find("point", 1, true)
+        or lower:find("spot", 1, true)
+        or lower:find("folder", 1, true)
         or lower:find("holder", 1, true)
         or lower:find("zone", 1, true)
-        or lower:find("template", 1, true) then
+        or lower:find("container", 1, true) then
         return false
     end
 
-    return getESPPart(obj) ~= nil
+    return true
 end
 
-local function formatESPDistance(distance)
-    if distance >= 1000 then
-        return string.format("%.1fk m", distance / 1000)
+local function getESPEggCandidate(obj, renderedRoot)
+    if not obj or not obj.Parent or not renderedRoot then
+        return nil
     end
-    return string.format("%d m", math.floor(distance + 0.5))
+
+    -- Direct Egg Model / Part.
+    if (obj:IsA("Model") or obj:IsA("BasePart"))
+        and looksLikeEggName(obj.Name) then
+        return obj
+    end
+
+    -- If the visible part is nested inside a named Egg Model,
+    -- resolve back to that Model so we create only one ESP.
+    if obj:IsA("BasePart") then
+        local current = obj.Parent
+        while current and current ~= renderedRoot do
+            if current:IsA("Model") and looksLikeEggName(current.Name) then
+                return current
+            end
+            current = current.Parent
+        end
+    end
+
+    return nil
 end
 
 local function createEggESP(egg)
-    if not egg or not egg.Parent then return nil end
     local part = getESPPart(egg)
     if not part then return nil end
 
     local gui = Instance.new("BillboardGui")
     gui.Name = "OLIVER_EggESP"
-    gui.Adornee = part
+    gui.Size = UDim2.new(0, 175, 0, 50)
+    gui.StudsOffset = Vector3.new(0, 3.1, 0)
     gui.AlwaysOnTop = true
-    gui.LightInfluence = 0
-    gui.MaxDistance = 5000
-    gui.Size = UDim2.new(0, 190, 0, 58)
-    gui.StudsOffset = Vector3.new(0, 3.2, 0)
+    gui.MaxDistance = 10000
+    gui.ResetOnSpawn = false
+    gui.Adornee = part
     gui.Parent = espEggFolder
 
     local bg = Instance.new("Frame")
     bg.Size = UDim2.new(1, 0, 1, 0)
-    bg.BackgroundColor3 = Color3.fromRGB(15, 17, 24)
-    bg.BackgroundTransparency = 0.12
+    bg.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
+    bg.BackgroundTransparency = 0.18
     bg.BorderSizePixel = 0
     bg.Parent = gui
 
@@ -617,120 +634,42 @@ local function createEggESP(egg)
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 1
-    stroke.Color = Color3.fromRGB(75, 120, 255)
+    stroke.Color = Color3.fromRGB(65, 165, 255)
     stroke.Transparency = 0.15
     stroke.Parent = bg
-
-    -- Real Egg preview: render the actual Egg model inside a ViewportFrame.
-    -- This does not depend on a hidden ImageId/TextureId, so it works even when
-    -- the game stores the Egg visual only as 3D parts/meshes.
-    local viewport = Instance.new("ViewportFrame")
-    viewport.Name = "EggImage"
-    viewport.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
-    viewport.BackgroundTransparency = 0
-    viewport.Position = UDim2.new(0, 5, 0, 5)
-    viewport.Size = UDim2.new(0, 48, 0, 48)
-    viewport.BorderSizePixel = 0
-    viewport.Ambient = Color3.fromRGB(200, 200, 200)
-    viewport.LightColor = Color3.fromRGB(255, 255, 255)
-    viewport.LightDirection = Vector3.new(-1, -1, -1)
-    viewport.Parent = bg
-
-    local viewportCorner = Instance.new("UICorner")
-    viewportCorner.CornerRadius = UDim.new(0, 7)
-    viewportCorner.Parent = viewport
-
-    local worldModel = Instance.new("WorldModel")
-    worldModel.Name = "EggWorld"
-    worldModel.Parent = viewport
-
-    local clone = nil
-    pcall(function()
-        if egg.Archivable then
-            clone = egg:Clone()
-        end
-    end)
-
-    if clone then
-        clone.Name = "EggPreview"
-        clone.Parent = worldModel
-
-        for _, d in ipairs(clone:GetDescendants()) do
-            if d:IsA("BasePart") then
-                d.Anchored = true
-                d.CanCollide = false
-                d.CanTouch = false
-                d.CanQuery = false
-            elseif d:IsA("ProximityPrompt") then
-                d.Enabled = false
-            end
-        end
-
-        local cam = Instance.new("Camera")
-        cam.Name = "EggCamera"
-        cam.Parent = viewport
-        viewport.CurrentCamera = cam
-
-        local ok, boxCFrame, boxSize = pcall(function()
-            return clone:GetBoundingBox()
-        end)
-
-        if ok and boxCFrame and boxSize then
-            clone:PivotTo(CFrame.new(0, 0, 0))
-            local maxSize = math.max(boxSize.X, boxSize.Y, boxSize.Z, 0.1)
-            cam.CFrame = CFrame.new(0, boxSize.Y * 0.05, maxSize * 2.4)
-                * CFrame.Angles(0, math.rad(180), 0)
-            cam.Focus = CFrame.new(0, boxSize.Y * 0.05, 0)
-        else
-            cam.CFrame = CFrame.new(0, 0, 4)
-            cam.Focus = CFrame.new()
-        end
-    else
-        -- Fallback to a real Image asset if the model cannot be cloned.
-        local image = Instance.new("ImageLabel")
-        image.Name = "EggAssetFallback"
-        image.BackgroundTransparency = 1
-        image.Size = UDim2.new(1, 0, 1, 0)
-        image.ScaleType = Enum.ScaleType.Fit
-        image.Image = getEggImageAsset(egg)
-        image.Parent = viewport
-
-        if image.Image == "" then
-            local placeholder = Instance.new("TextLabel")
-            placeholder.Size = UDim2.new(1, 0, 1, 0)
-            placeholder.BackgroundTransparency = 1
-            placeholder.Text = "🥚"
-            placeholder.TextSize = 25
-            placeholder.Parent = viewport
-        end
-    end
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "EggName"
     nameLabel.BackgroundTransparency = 1
-    nameLabel.Position = UDim2.new(0, 60, 0, 5)
-    nameLabel.Size = UDim2.new(1, -66, 0, 23)
+    nameLabel.Position = UDim2.new(0, 8, 0, 3)
+    nameLabel.Size = UDim2.new(1, -16, 0, 21)
     nameLabel.Text = egg.Name
     nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     nameLabel.Font = Enum.Font.SourceSansBold
     nameLabel.TextSize = 15
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Center
     nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
     nameLabel.Parent = bg
 
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.Name = "Distance"
     distanceLabel.BackgroundTransparency = 1
-    distanceLabel.Position = UDim2.new(0, 60, 0, 29)
-    distanceLabel.Size = UDim2.new(1, -66, 0, 20)
-    distanceLabel.Text = "0 studs"
+    distanceLabel.Position = UDim2.new(0, 8, 0, 25)
+    distanceLabel.Size = UDim2.new(1, -16, 0, 20)
+    distanceLabel.Text = "Distance: -- m"
     distanceLabel.TextColor3 = Color3.fromRGB(120, 210, 255)
     distanceLabel.Font = Enum.Font.SourceSans
     distanceLabel.TextSize = 13
-    distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+    distanceLabel.TextXAlignment = Enum.TextXAlignment.Center
     distanceLabel.Parent = bg
 
-    return {gui = gui, egg = egg, part = part, distance = distanceLabel, nameLabel = nameLabel}
+    return {
+        gui = gui,
+        egg = egg,
+        part = part,
+        nameLabel = nameLabel,
+        distance = distanceLabel,
+    }
 end
 
 local function destroyEggESP()
@@ -738,6 +677,7 @@ local function destroyEggESP()
         espEggConnection:Disconnect()
         espEggConnection = nil
     end
+
     if espEggFolder then
         espEggFolder:Destroy()
         espEggFolder = nil
@@ -747,6 +687,7 @@ end
 local function stopEggESP()
     espEggEnabled = false
     destroyEggESP()
+
     ESPEggBtn.Text = "ESP EGG | OFF"
     ESPEggBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 end
@@ -765,17 +706,66 @@ local function startEggESP()
     local entries = {}
     local lastScan = 0
 
-    local function scanContainer(container, alive)
-        if not container then return end
-        for _, egg in ipairs(container:GetChildren()) do
-            if isESPValidEgg(egg) then
-                alive[egg] = true
-                if not entries[egg] then
-                    local entry = createEggESP(egg)
-                    if entry then
-                        entries[egg] = entry
+    local function scanEggs(renderedRoot)
+        if not espEggEnabled or not renderedRoot or not renderedRoot.Parent then
+            return
+        end
+
+        local alive = {}
+
+        -- IMPORTANT:
+        -- Use GetDescendants(), not GetChildren().
+        -- Ride A Pet can recreate/nest Egg instances during restock/reset.
+        for _, obj in ipairs(renderedRoot:GetDescendants()) do
+            local egg = getESPEggCandidate(obj, renderedRoot)
+
+            if egg and egg.Parent and not alive[egg] then
+                local part = getESPPart(egg)
+
+                if part then
+                    alive[egg] = true
+
+                    if not entries[egg] then
+                        local entry = createEggESP(egg)
+                        if entry then
+                            entries[egg] = entry
+                        end
                     end
                 end
+            end
+        end
+
+        -- Also support an Egg that is itself the RenderedEggs child.
+        for _, obj in ipairs(renderedRoot:GetChildren()) do
+            local egg = getESPEggCandidate(obj, renderedRoot)
+
+            if egg and egg.Parent and not alive[egg] then
+                local part = getESPPart(egg)
+
+                if part then
+                    alive[egg] = true
+
+                    if not entries[egg] then
+                        local entry = createEggESP(egg)
+                        if entry then
+                            entries[egg] = entry
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Remove stale ESP entries after Egg reset/despawn/pickup.
+        for egg, entry in pairs(entries) do
+            if not alive[egg]
+                or not egg.Parent
+                or not egg:IsDescendantOf(renderedRoot) then
+
+                if entry.gui then
+                    entry.gui:Destroy()
+                end
+
+                entries[egg] = nil
             end
         end
     end
@@ -792,51 +782,31 @@ local function startEggESP()
         end
 
         RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
+        if not RenderedEggs then
+            -- If the game recreates RenderedEggs itself after a reset,
+            -- the next scan automatically picks up the new folder.
+            return
+        end
 
-        if os.clock() - lastScan >= 0.12 then
+        -- Frequent enough to catch short-lived Egg spawns and restocks,
+        -- while throttled for mobile performance.
+        if os.clock() - lastScan >= 0.20 then
             lastScan = os.clock()
-            local alive = {}
-
-            -- Primary source: RenderedEggs.
-            scanContainer(RenderedEggs, alive)
-
-            -- Fallback: if RenderedEggs is missing/empty, check Workspace
-            -- descendants for named Egg Models/Parts.
-            if not RenderedEggs or #RenderedEggs:GetChildren() == 0 then
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if isESPValidEgg(obj) then
-                        alive[obj] = true
-                        if not entries[obj] then
-                            local entry = createEggESP(obj)
-                            if entry then
-                                entries[obj] = entry
-                            end
-                        end
-                    end
-                end
-            end
-
-            for egg, entry in pairs(entries) do
-                if not alive[egg] or not egg.Parent then
-                    if entry.gui then entry.gui:Destroy() end
-                    entries[egg] = nil
-                end
-            end
+            scanEggs(RenderedEggs)
         end
 
         for egg, entry in pairs(entries) do
             if entry.gui and entry.gui.Parent and egg.Parent then
                 local part = getESPPart(egg)
+
                 if part then
                     entry.part = part
                     entry.gui.Adornee = part
-                    entry.distance.Text = formatESPDistance(
-                        (part.Position - root.Position).Magnitude
-                    )
-                    entry.nameLabel = entry.nameLabel or entry.gui:FindFirstChild("EggName", true)
-                    if entry.nameLabel then
-                        entry.nameLabel.Text = egg.Name
-                    end
+
+                    local distance = (part.Position - root.Position).Magnitude
+                    -- Roblox distance is in studs; shown as "m" to match the UI request.
+                    entry.distance.Text = string.format("Distance: %d m", math.floor(distance + 0.5))
+                    entry.nameLabel.Text = egg.Name
                 else
                     entry.gui:Destroy()
                     entries[egg] = nil
@@ -1850,6 +1820,8 @@ MapPanelBtn.Text = "Egg in Map | OFF"
 MapPanelBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 ESPEggBtn.Text = "ESP EGG | OFF"
 ESPEggBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+SpeedBtn.Text = "SPEED | OFF"
+SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 
 -- All panels are independent. Main UI starts closed.
 MainFrame.Visible = false
