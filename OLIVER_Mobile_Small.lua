@@ -519,12 +519,12 @@ end)
 
 -- =========================================================
 -- EGG ESP
--- Robust Ride A Pet version:
---   • scans ALL descendants under RenderedEggs
---   • does NOT require a ProximityPrompt
---   • catches reset/re-spawned Eggs automatically
---   • removes entries when an Egg disappears
---   • shows only Name + Distance for mobile performance
+-- Mobile optimized:
+--   • one ESP label per actual Egg container
+--   • no black background
+--   • only Khmer distance text: "ចម្ងាយ: XX m"
+--   • ignores internal names such as EggBase
+--   • scans less often to reduce mobile lag
 -- =========================================================
 
 local function getESPPart(obj)
@@ -567,7 +567,6 @@ local function looksLikeEggName(name)
         return false
     end
 
-    -- Ignore common containers/markers that can contain the word "egg".
     if lower:find("spawn", 1, true)
         or lower:find("point", 1, true)
         or lower:find("spot", 1, true)
@@ -581,60 +580,71 @@ local function looksLikeEggName(name)
     return true
 end
 
+-- Resolve every visible part to ONE top-level Egg object.
+-- This prevents 2-3 labels being created for the same EggBase/model.
 local function getESPEggCandidate(obj, renderedRoot)
     if not obj or not obj.Parent or not renderedRoot then
         return nil
     end
 
-    -- Direct Egg Model / Part.
-    if (obj:IsA("Model") or obj:IsA("BasePart"))
-        and looksLikeEggName(obj.Name) then
-        return obj
+    local current = obj
+    local best = nil
+
+    while current and current ~= renderedRoot do
+        if current:IsA("Model") and looksLikeEggName(current.Name) then
+            best = current
+        end
+        current = current.Parent
     end
 
-    -- If the visible part is nested inside a named Egg Model,
-    -- resolve back to that Model so we create only one ESP.
-    if obj:IsA("BasePart") then
-        local current = obj.Parent
-        while current and current ~= renderedRoot do
-            if current:IsA("Model") and looksLikeEggName(current.Name) then
-                return current
-            end
-            current = current.Parent
+    if best then
+        return best
+    end
+
+    -- If the direct child is an internal EggBase/container, use it as the
+    -- identity object, but only one ESP is created for that container.
+    local top = obj
+    while top.Parent and top.Parent ~= renderedRoot do
+        top = top.Parent
+    end
+
+    if top ~= renderedRoot then
+        local topName = tostring(top.Name or ""):lower()
+        if topName == "eggbase" or topName:find("eggbase", 1, true) then
+            return top
         end
+    end
+
+    if (obj:IsA("Model") or obj:IsA("BasePart")) and looksLikeEggName(obj.Name) then
+        return obj
     end
 
     return nil
 end
 
 local function getESPDisplayName(egg)
-    if not egg then return "" end
+    if not egg then return "Egg" end
 
-    local ownName = tostring(egg.Name or "")
-    local ownLower = ownName:lower()
+    -- Prefer the real Egg name, never show internal names such as EggBase.
+    if looksLikeEggName(egg.Name) and tostring(egg.Name):lower() ~= "eggbase" then
+        return tostring(egg.Name)
+    end
 
-    -- Never show internal container names such as EggBase.
-    if ownLower == "eggbase" or ownLower:find("eggbase", 1, true) then
-        -- Try to find the real Egg name inside the container.
-        for _, child in ipairs(egg:GetDescendants()) do
-            local childName = tostring(child.Name or "")
-            if ESPKnownEggNames[childName:lower()] then
-                return childName
+    -- If the visible container is EggBase, find the real Egg name inside it.
+    local bestName = nil
+    for _, obj in ipairs(egg:GetDescendants()) do
+        if (obj:IsA("Model") or obj:IsA("BasePart")) and looksLikeEggName(obj.Name) then
+            local n = tostring(obj.Name)
+            if n:lower() ~= "eggbase" then
+                if ESPKnownEggNames[n:lower()] then
+                    return n
+                end
+                bestName = bestName or n
             end
         end
-        return ""
     end
 
-    if ESPKnownEggNames[ownLower] then
-        return ownName
-    end
-
-    -- Do not expose generic/internal names on the ESP.
-    if ownLower:find("egg", 1, true) then
-        return ""
-    end
-
-    return ownName
+    return bestName or "Egg"
 end
 
 local function createEggESP(egg)
@@ -643,53 +653,36 @@ local function createEggESP(egg)
 
     local gui = Instance.new("BillboardGui")
     gui.Name = "OLIVER_EggESP"
-    gui.Size = UDim2.new(0, 180, 0, 30)
-    gui.StudsOffset = Vector3.new(0, 3.1, 0)
+    gui.Size = UDim2.new(0, 180, 0, 42)
+    gui.StudsOffset = Vector3.new(0, 3.0, 0)
     gui.AlwaysOnTop = true
-    gui.MaxDistance = 10000
+    gui.MaxDistance = 5000
     gui.ResetOnSpawn = false
     gui.Adornee = part
     gui.Parent = espEggFolder
 
-    -- No Frame/background: the ESP is text-only.
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "EggName"
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.BorderSizePixel = 0
-    nameLabel.Size = UDim2.new(1, 0, 0, 17)
-    nameLabel.Position = UDim2.new(0, 0, 0, 0)
-    nameLabel.Text = getESPDisplayName(egg)
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    nameLabel.TextStrokeTransparency = 0.15
-    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    nameLabel.Font = Enum.Font.SourceSansBold
-    nameLabel.TextSize = 15
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Center
-    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    nameLabel.Visible = nameLabel.Text ~= ""
-    nameLabel.Parent = gui
-
-    local distanceLabel = Instance.new("TextLabel")
-    distanceLabel.Name = "Distance"
-    distanceLabel.BackgroundTransparency = 1
-    distanceLabel.BorderSizePixel = 0
-    distanceLabel.Position = nameLabel.Visible and UDim2.new(0, 0, 0, 15) or UDim2.new(0, 0, 0, 5)
-    distanceLabel.Size = UDim2.new(1, 0, 0, 20)
-    distanceLabel.Text = "Distance: -- m"
-    distanceLabel.TextColor3 = Color3.fromRGB(120, 210, 255)
-    distanceLabel.TextStrokeTransparency = 0.15
-    distanceLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    distanceLabel.Font = Enum.Font.SourceSansBold
-    distanceLabel.TextSize = 13
-    distanceLabel.TextXAlignment = Enum.TextXAlignment.Center
-    distanceLabel.Parent = gui
+    -- Text only: no Frame/background. Name + one distance line.
+    local label = Instance.new("TextLabel")
+    label.Name = "Info"
+    label.BackgroundTransparency = 1
+    label.BorderSizePixel = 0
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Text = getESPDisplayName(egg) .. "\nចម្ងាយ: -- m"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeTransparency = 0.15
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 15
+    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextYAlignment = Enum.TextYAlignment.Center
+    label.Parent = gui
 
     return {
         gui = gui,
         egg = egg,
         part = part,
-        nameLabel = nameLabel,
-        distance = distanceLabel,
+        label = label,
+        displayName = getESPDisplayName(egg),
     }
 end
 
@@ -726,6 +719,7 @@ local function startEggESP()
 
     local entries = {}
     local lastScan = 0
+    local lastDistanceUpdate = 0
 
     local function scanEggs(renderedRoot)
         if not espEggEnabled or not renderedRoot or not renderedRoot.Parent then
@@ -734,15 +728,12 @@ local function startEggESP()
 
         local alive = {}
 
-        -- IMPORTANT:
-        -- Use GetDescendants(), not GetChildren().
-        -- Ride A Pet can recreate/nest Egg instances during restock/reset.
+        -- One scan per 0.60s is much lighter on mobile than scanning every frame.
         for _, obj in ipairs(renderedRoot:GetDescendants()) do
             local egg = getESPEggCandidate(obj, renderedRoot)
 
             if egg and egg.Parent and not alive[egg] then
                 local part = getESPPart(egg)
-
                 if part then
                     alive[egg] = true
 
@@ -756,16 +747,13 @@ local function startEggESP()
             end
         end
 
-        -- Also support an Egg that is itself the RenderedEggs child.
+        -- Also catch an Egg that is itself a direct child.
         for _, obj in ipairs(renderedRoot:GetChildren()) do
             local egg = getESPEggCandidate(obj, renderedRoot)
-
             if egg and egg.Parent and not alive[egg] then
                 local part = getESPPart(egg)
-
                 if part then
                     alive[egg] = true
-
                     if not entries[egg] then
                         local entry = createEggESP(egg)
                         if entry then
@@ -776,7 +764,6 @@ local function startEggESP()
             end
         end
 
-        -- Remove stale ESP entries after Egg reset/despawn/pickup.
         for egg, entry in pairs(entries) do
             if not alive[egg]
                 or not egg.Parent
@@ -785,13 +772,12 @@ local function startEggESP()
                 if entry.gui then
                     entry.gui:Destroy()
                 end
-
                 entries[egg] = nil
             end
         end
     end
 
-    espEggConnection = RunService.RenderStepped:Connect(function()
+    espEggConnection = RunService.Heartbeat:Connect(function()
         if not espEggEnabled or not ScreenGui.Parent then
             return
         end
@@ -804,17 +790,21 @@ local function startEggESP()
 
         RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
         if not RenderedEggs then
-            -- If the game recreates RenderedEggs itself after a reset,
-            -- the next scan automatically picks up the new folder.
             return
         end
 
-        -- Frequent enough to catch short-lived Egg spawns and restocks,
-        -- while throttled for mobile performance.
-        if os.clock() - lastScan >= 0.20 then
-            lastScan = os.clock()
+        local now = os.clock()
+
+        if now - lastScan >= 0.60 then
+            lastScan = now
             scanEggs(RenderedEggs)
         end
+
+        -- Distance text only needs a few updates per second.
+        if now - lastDistanceUpdate < 0.20 then
+            return
+        end
+        lastDistanceUpdate = now
 
         for egg, entry in pairs(entries) do
             if entry.gui and entry.gui.Parent and egg.Parent then
@@ -825,9 +815,7 @@ local function startEggESP()
                     entry.gui.Adornee = part
 
                     local distance = (part.Position - root.Position).Magnitude
-                    -- Roblox distance is in studs; shown as "m" to match the UI request.
-                    entry.distance.Text = string.format("Distance: %d m", math.floor(distance + 0.5))
-                    entry.nameLabel.Text = egg.Name
+                    entry.label.Text = string.format("%s\nចម្ងាយ: %d m", entry.displayName or "Egg", math.floor(distance + 0.5))
                 else
                     entry.gui:Destroy()
                     entries[egg] = nil
