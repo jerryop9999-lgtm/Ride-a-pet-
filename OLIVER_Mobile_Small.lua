@@ -534,29 +534,88 @@ local function createEggESP(egg)
     stroke.Transparency = 0.15
     stroke.Parent = bg
 
-    local image = Instance.new("ImageLabel")
-    image.Name = "EggImage"
-    image.BackgroundTransparency = 1
-    image.Position = UDim2.new(0, 5, 0, 5)
-    image.Size = UDim2.new(0, 48, 0, 48)
-    image.ScaleType = Enum.ScaleType.Fit
-    image.Parent = bg
+    -- Real Egg preview: render the actual Egg model inside a ViewportFrame.
+    -- This does not depend on a hidden ImageId/TextureId, so it works even when
+    -- the game stores the Egg visual only as 3D parts/meshes.
+    local viewport = Instance.new("ViewportFrame")
+    viewport.Name = "EggImage"
+    viewport.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
+    viewport.BackgroundTransparency = 0
+    viewport.Position = UDim2.new(0, 5, 0, 5)
+    viewport.Size = UDim2.new(0, 48, 0, 48)
+    viewport.BorderSizePixel = 0
+    viewport.Ambient = Color3.fromRGB(200, 200, 200)
+    viewport.LightColor = Color3.fromRGB(255, 255, 255)
+    viewport.LightDirection = Vector3.new(-1, -1, -1)
+    viewport.Parent = bg
 
-    local asset = getEggImageAsset(egg)
-    if asset ~= "" then
-        image.Image = asset
+    local viewportCorner = Instance.new("UICorner")
+    viewportCorner.CornerRadius = UDim.new(0, 7)
+    viewportCorner.Parent = viewport
+
+    local worldModel = Instance.new("WorldModel")
+    worldModel.Name = "EggWorld"
+    worldModel.Parent = viewport
+
+    local clone = nil
+    pcall(function()
+        if egg.Archivable then
+            clone = egg:Clone()
+        end
+    end)
+
+    if clone then
+        clone.Name = "EggPreview"
+        clone.Parent = worldModel
+
+        for _, d in ipairs(clone:GetDescendants()) do
+            if d:IsA("BasePart") then
+                d.Anchored = true
+                d.CanCollide = false
+                d.CanTouch = false
+                d.CanQuery = false
+            elseif d:IsA("ProximityPrompt") then
+                d.Enabled = false
+            end
+        end
+
+        local cam = Instance.new("Camera")
+        cam.Name = "EggCamera"
+        cam.Parent = viewport
+        viewport.CurrentCamera = cam
+
+        local ok, boxCFrame, boxSize = pcall(function()
+            return clone:GetBoundingBox()
+        end)
+
+        if ok and boxCFrame and boxSize then
+            clone:PivotTo(CFrame.new(0, 0, 0))
+            local maxSize = math.max(boxSize.X, boxSize.Y, boxSize.Z, 0.1)
+            cam.CFrame = CFrame.new(0, boxSize.Y * 0.05, maxSize * 2.4)
+                * CFrame.Angles(0, math.rad(180), 0)
+            cam.Focus = CFrame.new(0, boxSize.Y * 0.05, 0)
+        else
+            cam.CFrame = CFrame.new(0, 0, 4)
+            cam.Focus = CFrame.new()
+        end
     else
-        -- Keep a visible Egg image area even when the model does not expose an asset id.
-        image.Image = ""
-        image.BackgroundTransparency = 0
-        image.BackgroundColor3 = Color3.fromRGB(45, 49, 65)
-        local placeholder = Instance.new("TextLabel")
-        placeholder.Name = "EggImagePlaceholder"
-        placeholder.Size = UDim2.new(1, 0, 1, 0)
-        placeholder.BackgroundTransparency = 1
-        placeholder.Text = "🥚"
-        placeholder.TextSize = 25
-        placeholder.Parent = image
+        -- Fallback to a real Image asset if the model cannot be cloned.
+        local image = Instance.new("ImageLabel")
+        image.Name = "EggAssetFallback"
+        image.BackgroundTransparency = 1
+        image.Size = UDim2.new(1, 0, 1, 0)
+        image.ScaleType = Enum.ScaleType.Fit
+        image.Image = getEggImageAsset(egg)
+        image.Parent = viewport
+
+        if image.Image == "" then
+            local placeholder = Instance.new("TextLabel")
+            placeholder.Size = UDim2.new(1, 0, 1, 0)
+            placeholder.BackgroundTransparency = 1
+            placeholder.Text = "🥚"
+            placeholder.TextSize = 25
+            placeholder.Parent = viewport
+        end
     end
 
     local nameLabel = Instance.new("TextLabel")
@@ -1106,6 +1165,8 @@ local KnownEggLuck = {
     ["Galaxy Egg"] = 1500000000,
     ["Black Hole Egg"] = 100000000000,
     ["Blackhole Egg"] = 100000000000,
+    ["Solaris Egg"] = 300000000000,
+    ["Solaris"] = 300000000000,
     ["Cherub Egg"] = 1000000000000,
 }
 
@@ -1212,22 +1273,33 @@ local function getEggByName(name)
 end
 
 local function findTargetEgg()
-    -- Highest live Egg Luck wins. Player Hatch Luck is never used.
+    -- BEST-FIRST selection: choose the highest Egg Luck currently spawned.
+    -- This checks the live Egg Luck first, so the order automatically adapts
+    -- to whatever Eggs are actually in the Map. Player Hatch Luck is never used.
     RenderedEggs = Workspace:FindFirstChild("RenderedEggs")
     if not RenderedEggs then return nil end
 
-    local best, bestLuck = nil, -1
+    local candidates = {}
     for _, egg in ipairs(RenderedEggs:GetChildren()) do
         if isValidEgg(egg) then
-            local luck = getEggLuck(egg)
-            if luck and luck > bestLuck then
-                best, bestLuck = egg, luck
-            end
+            local luck = getEggLuck(egg) or 0
+            table.insert(candidates, {egg = egg, luck = luck})
         end
     end
-    if best then return best end
 
-    -- If live Luck is hidden, use the researched named ladder only as fallback.
+    table.sort(candidates, function(a, b)
+        if a.luck ~= b.luck then
+            return a.luck > b.luck
+        end
+        return a.egg.Name:lower() < b.egg.Name:lower()
+    end)
+
+    if candidates[1] and candidates[1].luck > 0 then
+        return candidates[1].egg
+    end
+
+    -- If live Luck is hidden, use the researched 23-Egg ladder from highest
+    -- Luck to lowest Luck as the deterministic fallback.
     for i = #EggPriority, 1, -1 do
         local wanted = EggPriority[i]
         for _, egg in ipairs(RenderedEggs:GetChildren()) do
