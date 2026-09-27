@@ -2232,7 +2232,6 @@ SpeedBtn.Text = "SPEED | OFF"
 SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 
 -- All panels are independent. Main UI starts closed.
-Content.CanvasPosition = Vector2.new(0, 0)
 MapScroll.CanvasPosition = Vector2.new(0, 0)
 MainFrame.Visible = false
 MapFrame.Visible = false
