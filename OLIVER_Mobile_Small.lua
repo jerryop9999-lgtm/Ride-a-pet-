@@ -670,11 +670,13 @@ local resetExpiredEggTarget
 
 local EggTypeFrame = Instance.new("Frame")
 EggTypeFrame.Name = "SelectEggTypePanel"
-EggTypeFrame.Size = UDim2.new(0, 210, 0, 285)
-EggTypeFrame.Position = UDim2.new(0.5, -105, 0.5, -142)
+EggTypeFrame.Size = UDim2.new(0, 210, 0, 270)
+EggTypeFrame.Position = UDim2.new(0.5, -105, 0.5, -135)
 EggTypeFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 EggTypeFrame.BorderSizePixel = 0
 EggTypeFrame.Visible = false
+EggTypeFrame.ClipsDescendants = true
+EggTypeFrame.ZIndex = 40
 EggTypeFrame.Parent = ScreenGui
 
 local eggTypeCorner = Instance.new("UICorner")
@@ -690,6 +692,7 @@ local EggTypeHeader = Instance.new("Frame")
 EggTypeHeader.Size = UDim2.new(1, 0, 0, 43)
 EggTypeHeader.BackgroundColor3 = Color3.fromRGB(24, 27, 38)
 EggTypeHeader.BorderSizePixel = 0
+EggTypeHeader.ZIndex = 41
 EggTypeHeader.Parent = EggTypeFrame
 
 local eggTypeHeaderCorner = Instance.new("UICorner")
@@ -705,20 +708,29 @@ EggTypeTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 EggTypeTitle.Font = Enum.Font.SourceSansBold
 EggTypeTitle.TextSize = 17
 EggTypeTitle.TextXAlignment = Enum.TextXAlignment.Left
+EggTypeTitle.ZIndex = 42
 EggTypeTitle.Parent = EggTypeHeader
 
-local EggTypeScroll = Instance.new("Frame")
+local EggTypeScroll = Instance.new("ScrollingFrame")
 EggTypeScroll.Name = "List"
 EggTypeScroll.Size = UDim2.new(1, -12, 1, -50)
 EggTypeScroll.Position = UDim2.new(0, 6, 0, 47)
 EggTypeScroll.BackgroundTransparency = 1
 EggTypeScroll.BorderSizePixel = 0
+EggTypeScroll.ScrollBarThickness = 5
+EggTypeScroll.ScrollBarImageTransparency = 0.12
+EggTypeScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+EggTypeScroll.CanvasSize = UDim2.new(0, 0, 0, 253)
+EggTypeScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
+EggTypeScroll.ClipsDescendants = true
+EggTypeScroll.ZIndex = 42
 EggTypeScroll.Parent = EggTypeFrame
 
 local eggTypeLayout = Instance.new("UIListLayout")
 eggTypeLayout.SortOrder = Enum.SortOrder.LayoutOrder
 eggTypeLayout.Padding = UDim.new(0, 3)
 eggTypeLayout.Parent = EggTypeScroll
+eggTypeLayout.Padding = UDim.new(0, 3)
 
 makeDraggable(EggTypeFrame, EggTypeHeader)
 
@@ -780,8 +792,8 @@ local function makeEggTypeOption(name)
     b.Font = Enum.Font.SourceSansBold
     b.TextSize = 14
     b.BorderSizePixel = 0
+    b.ZIndex = 43
     b.Parent = EggTypeScroll
-    setupTouchButton(b)
 
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 7)
@@ -797,7 +809,7 @@ for _, eggType in ipairs(EggTypes) do
 end
 
 
-eggTypeButtons.All.MouseButton1Click:Connect(function()
+connectTap(eggTypeButtons.All, function()
     eggTypeAll = true
     table.clear(selectedEggTypes)
     refreshEggTypeButtons()
@@ -805,7 +817,7 @@ eggTypeButtons.All.MouseButton1Click:Connect(function()
 end)
 
 for _, eggType in ipairs(EggTypes) do
-    eggTypeButtons[eggType].MouseButton1Click:Connect(function()
+    connectTap(eggTypeButtons[eggType], function()
         if eggTypeAll then
             eggTypeAll = false
             table.clear(selectedEggTypes)
