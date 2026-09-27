@@ -1225,6 +1225,71 @@ local function findPlayerBase()
     cachedBasePart = nil
     cachedBaseScore = 0
 
+    local playerName = LocalPlayer.Name:lower()
+    local displayName = LocalPlayer.DisplayName:lower()
+
+    -- Research-based priority: community scripts look inside Workspace.Plots and
+    -- identify the player's plot by PlayerSign > BillboardGui > TextLabel, or by
+    -- the plot's "owner" attribute. We prefer these exact ownership signals.
+    local plotsRoot = Workspace:FindFirstChild("Plots")
+    if plotsRoot then
+        for _, plot in ipairs(plotsRoot:GetChildren()) do
+            if plot:IsA("Model") or plot:IsA("Folder") then
+                local matched = false
+                local matchScore = 0
+
+                local ownerAttr = plot:GetAttribute("owner")
+                if typeof(ownerAttr) == "string" then
+                    local owner = ownerAttr:lower()
+                    if owner == playerName or owner == displayName then
+                        matched = true
+                        matchScore = 100
+                    end
+                elseif typeof(ownerAttr) == "number" and ownerAttr == LocalPlayer.UserId then
+                    matched = true
+                    matchScore = 100
+                end
+
+                local playerSign = plot:FindFirstChild("PlayerSign", true)
+                if playerSign then
+                    local billboard = playerSign:FindFirstChild("BillboardGui", true)
+                    if billboard then
+                        local label = billboard:FindFirstChild("TextLabel", true)
+                        if label and label:IsA("TextLabel") then
+                            local textValue = tostring(label.Text or ""):lower()
+                            if textValue == playerName or textValue == displayName then
+                                matched = true
+                                matchScore = math.max(matchScore, 120)
+                            elseif textValue:find(playerName, 1, true) or textValue:find(displayName, 1, true) then
+                                matched = true
+                                matchScore = math.max(matchScore, 110)
+                            end
+                        end
+                    end
+                end
+
+                -- Also accept a direct plot/name match as a fallback within Plots only.
+                local plotName = plot.Name:lower()
+                if plotName == playerName or plotName == displayName then
+                    matched = true
+                    matchScore = math.max(matchScore, 90)
+                end
+
+                if matched then
+                    local part = findReturnPart(plot)
+                    if part then
+                        cachedBasePart = part
+                        cachedBaseScore = matchScore + baseNameScore(plot)
+                        print("[OLIVER] MY PLOT FOUND:", plot:GetFullName(), "RETURN:", part:GetFullName(), "score=", cachedBaseScore)
+                        return cachedBasePart
+                    end
+                end
+            end
+        end
+    end
+
+    -- Secondary ownership scan for games/updates where the plot container is not
+    -- directly under Workspace.Plots. Never fall back to nearest Base/Plot.
     local keywords = {"base", "bases", "ranch", "ranches", "plot", "plots", "home"}
     local function hasKeyword(name)
         name = name:lower()
@@ -1234,22 +1299,12 @@ local function findPlayerBase()
         return false
     end
 
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local nearestPart, nearestDistance = nil, math.huge
-
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if hasKeyword(obj.Name) then
-            local part = findReturnPart(obj)
-            if part then
-                local distance = root and (part.Position - root.Position).Magnitude or math.huge
-                if distance < nearestDistance then
-                    nearestDistance = distance
-                    nearestPart = part
-                end
-
-                local ownerScore = candidateOwnerMatch(obj)
-                if ownerScore > 0 then
+            local ownerScore = candidateOwnerMatch(obj)
+            if ownerScore > 0 then
+                local part = findReturnPart(obj)
+                if part then
                     local score = ownerScore + baseNameScore(obj)
                     if score > cachedBaseScore then
                         cachedBaseScore = score
@@ -1260,14 +1315,10 @@ local function findPlayerBase()
         end
     end
 
-    -- IMPORTANT: only return to a Base/Plot that is positively owned by
-    -- this LocalPlayer. Never fall back to the nearest Base/Plot, because
-    -- that can send the character to another player's Base.
-    if not cachedBasePart then
-        cachedBaseScore = 0
-        warn("[OLIVER] OWN BASE RETURN: player's own Base/Ranch was not found; refusing to select another player's Base")
+    if cachedBasePart then
+        print("[OLIVER] MY PLOT / OWN BASE FOUND:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
     else
-        print("[OLIVER] OWN BASE RETURN ONLY:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+        warn("[OLIVER] My Plot was not found by ownership/sign detection")
     end
 
     return cachedBasePart
