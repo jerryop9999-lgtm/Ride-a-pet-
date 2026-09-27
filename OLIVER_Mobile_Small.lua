@@ -1216,122 +1216,6 @@ local cachedBasePart = nil
 local cachedBaseScore = 0
 local lastBaseScan = 0
 
-local function normalizeRanchText(text)
-    text = tostring(text or "")
-    text = text:gsub("%s+", " ")
-    return text:match("^%s*(.-)%s*$")
-end
-
-local function getTextLikeValue(obj)
-    if not obj then return nil end
-
-    -- Normal Roblox UI text.
-    if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-        local ok, text = pcall(function() return obj.Text end)
-        if ok and text ~= nil then return tostring(text) end
-    end
-
-    -- Some games use StringValue/TextMesh-like objects instead of a TextLabel.
-    if obj:IsA("StringValue") then
-        local ok, value = pcall(function() return obj.Value end)
-        if ok and value ~= nil then return tostring(value) end
-    end
-
-    -- Also check a few common custom text attributes.
-    for _, attrName in ipairs({"Text", "DisplayText", "Label", "Title", "NameText"}) do
-        local ok, value = pcall(function() return obj:GetAttribute(attrName) end)
-        if ok and value ~= nil then return tostring(value) end
-    end
-
-    return nil
-end
-
-local function isYourRanchText(text)
-    text = normalizeRanchText(text):lower()
-    return text == "your ranch" or text == "your ranch's" or text == "your ranch’s"
-end
-
-local function hasYourRanchLabel(obj)
-    if not obj then return false end
-
-    local ownText = getTextLikeValue(obj)
-    if isYourRanchText(ownText) then return true end
-
-    for _, d in ipairs(obj:GetDescendants()) do
-        local text = getTextLikeValue(d)
-        if isYourRanchText(text) then
-            return true
-        end
-    end
-
-    return false
-end
-
-local function getWorldPartFromGui(guiObj)
-    if not guiObj then return nil end
-
-    -- BillboardGui / SurfaceGui may point directly at the world object.
-    local ok, adornee = pcall(function() return guiObj.Adornee end)
-    if ok and adornee then
-        if adornee:IsA("BasePart") then return adornee end
-        local p = findReturnPart(adornee)
-        if p then return p end
-    end
-
-    -- Walk ancestors. This also handles a TextLabel nested under a BillboardGui
-    -- that is itself parented under a world BasePart/Model.
-    local current = guiObj
-    for _ = 1, 12 do
-        if not current then break end
-        local p = findReturnPart(current)
-        if p then return p end
-        current = current.Parent
-    end
-
-    return nil
-end
-
-local function collectYourRanchMarkers()
-    local markers = {}
-    local seen = {}
-
-    local function scan(root)
-        if not root then return end
-        local ok, descendants = pcall(function() return root:GetDescendants() end)
-        if not ok or not descendants then return end
-
-        for _, obj in ipairs(descendants) do
-            local text = getTextLikeValue(obj)
-            if isYourRanchText(text) and not seen[obj] then
-                seen[obj] = true
-                table.insert(markers, obj)
-            end
-        end
-
-        local ownText = getTextLikeValue(root)
-        if isYourRanchText(ownText) and not seen[root] then
-            seen[root] = true
-            table.insert(markers, root)
-        end
-    end
-
-    scan(Workspace)
-
-    -- Some games place the ranch sign GUI in PlayerGui and use Adornee to
-    -- attach it to a world part. Search there too.
-    local ok, playerGui = pcall(function() return LocalPlayer:FindFirstChildOfClass("PlayerGui") end)
-    if ok and playerGui then
-        scan(playerGui)
-    end
-
-    return markers
-end
-
-local function ranchLabelOwnerScore(obj)
-    if not obj then return 0 end
-    return hasYourRanchLabel(obj) and 1000 or 0
-end
-
 local function findPlayerBase()
     if cachedBasePart and cachedBasePart.Parent and (os.clock() - lastBaseScan) < 2 then
         return cachedBasePart
@@ -1343,77 +1227,50 @@ local function findPlayerBase()
 
     local keywords = {"base", "bases", "ranch", "ranches", "plot", "plots", "home"}
     local function hasKeyword(name)
-        name = tostring(name or ""):lower()
+        name = name:lower()
         for _, key in ipairs(keywords) do
             if name:find(key, 1, true) then return true end
         end
         return false
     end
 
-    -- Priority #1: find the actual visible ownership marker. We search both
-    -- Workspace and PlayerGui, and support Adornee-based SurfaceGui/BillboardGui.
-    local markers = collectYourRanchMarkers()
-    for _, marker in ipairs(markers) do
-        local current = marker
-        local bestContainer = nil
-        local bestPart = getWorldPartFromGui(marker)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local nearestPart, nearestDistance = nil, math.huge
 
-        for _ = 1, 12 do
-            if not current then break end
-            if hasKeyword(current.Name) then
-                bestContainer = current
-            end
-            local p = findReturnPart(current)
-            if p then bestPart = p end
-            current = current.Parent
-        end
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if hasKeyword(obj.Name) then
+            local part = findReturnPart(obj)
+            if part then
+                local distance = root and (part.Position - root.Position).Magnitude or math.huge
+                if distance < nearestDistance then
+                    nearestDistance = distance
+                    nearestPart = part
+                end
 
-        local p = nil
-        if bestContainer then
-            p = findReturnPart(bestContainer) or bestPart
-        else
-            p = bestPart
-        end
-
-        if p then
-            local score = 1000
-            if bestContainer then score += baseNameScore(bestContainer) end
-            -- Prefer a world part reached through Adornee/actual sign over
-            -- arbitrary GUI hierarchy parts.
-            if getWorldPartFromGui(marker) then score += 50 end
-
-            if score > cachedBaseScore then
-                cachedBaseScore = score
-                cachedBasePart = p
-            end
-        end
-    end
-
-    -- Priority #2: explicit owner markers / username markers.
-    if not cachedBasePart then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if hasKeyword(obj.Name) then
-                local part = findReturnPart(obj)
-                if part then
-                    local ownerScore = candidateOwnerMatch(obj)
-                    if ownerScore > 0 then
-                        local score = 100 + ownerScore + baseNameScore(obj)
-                        if score > cachedBaseScore then
-                            cachedBaseScore = score
-                            cachedBasePart = part
-                        end
+                local ownerScore = candidateOwnerMatch(obj)
+                if ownerScore > 0 then
+                    local score = ownerScore + baseNameScore(obj)
+                    if score > cachedBaseScore then
+                        cachedBaseScore = score
+                        cachedBasePart = part
                     end
                 end
             end
         end
     end
 
-    -- IMPORTANT: never use nearest-ranch fallback. If ownership cannot be
-    -- proven, do not risk returning the player to somebody else's ranch.
+    -- No owner marker: use the Base/Plot nearest to the player's position at startup,
+    -- instead of arbitrarily selecting another player's plot.
+    if not cachedBasePart then
+        cachedBasePart = nearestPart
+        cachedBaseScore = nearestPart and 1 or 0
+    end
+
     if cachedBasePart then
-        print("[OLIVER] YOUR RANCH RETURN:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+        print("[OLIVER] OWN BASE RETURN:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
     else
-        warn("[OLIVER] Your Ranch / player-owned Ranch was not found")
+        warn("[OLIVER] Player-owned Base/Ranch was not found")
     end
 
     return cachedBasePart
