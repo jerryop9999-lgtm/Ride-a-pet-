@@ -1260,17 +1260,14 @@ local function findPlayerBase()
         end
     end
 
-    -- No owner marker: use the Base/Plot nearest to the player's position at startup,
-    -- instead of arbitrarily selecting another player's plot.
+    -- IMPORTANT: only return to a Base/Plot that is positively owned by
+    -- this LocalPlayer. Never fall back to the nearest Base/Plot, because
+    -- that can send the character to another player's Base.
     if not cachedBasePart then
-        cachedBasePart = nearestPart
-        cachedBaseScore = nearestPart and 1 or 0
-    end
-
-    if cachedBasePart then
-        print("[OLIVER] OWN BASE RETURN:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+        cachedBaseScore = 0
+        warn("[OLIVER] OWN BASE RETURN: player's own Base/Ranch was not found; refusing to select another player's Base")
     else
-        warn("[OLIVER] Player-owned Base/Ranch was not found")
+        print("[OLIVER] OWN BASE RETURN ONLY:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
     end
 
     return cachedBasePart
