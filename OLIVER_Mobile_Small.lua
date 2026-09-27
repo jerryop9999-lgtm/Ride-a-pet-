@@ -1216,6 +1216,54 @@ local cachedBasePart = nil
 local cachedBaseScore = 0
 local lastBaseScan = 0
 
+local function normalizeRanchText(text)
+    text = tostring(text or "")
+    text = text:gsub("%s+", " ")
+    return text:match("^%s*(.-)%s*$")
+end
+
+local function hasYourRanchLabel(obj)
+    if not obj then return false end
+
+    -- The live game visibly marks the player's own ranch as exactly "Your Ranch".
+    -- Check TextLabel/TextButton/TextBox objects and their ancestors.
+    for _, d in ipairs(obj:GetDescendants()) do
+        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+            local ok, text = pcall(function() return d.Text end)
+            if ok and normalizeRanchText(text) == "Your Ranch" then
+                return true
+            end
+        end
+    end
+
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+        local ok, text = pcall(function() return obj.Text end)
+        if ok and normalizeRanchText(text) == "Your Ranch" then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function ranchLabelOwnerScore(obj)
+    if not obj then return 0 end
+    local score = 0
+    local current = obj
+
+    -- Walk upward so a TextLabel/BillboardGui can resolve to its ranch model.
+    for _ = 1, 8 do
+        if not current then break end
+        if hasYourRanchLabel(current) then
+            score += 1000
+            break
+        end
+        current = current.Parent
+    end
+
+    return score
+end
+
 local function findPlayerBase()
     if cachedBasePart and cachedBasePart.Parent and (os.clock() - lastBaseScan) < 2 then
         return cachedBasePart
@@ -1225,71 +1273,6 @@ local function findPlayerBase()
     cachedBasePart = nil
     cachedBaseScore = 0
 
-    local playerName = LocalPlayer.Name:lower()
-    local displayName = LocalPlayer.DisplayName:lower()
-
-    -- Research-based priority: community scripts look inside Workspace.Plots and
-    -- identify the player's plot by PlayerSign > BillboardGui > TextLabel, or by
-    -- the plot's "owner" attribute. We prefer these exact ownership signals.
-    local plotsRoot = Workspace:FindFirstChild("Plots")
-    if plotsRoot then
-        for _, plot in ipairs(plotsRoot:GetChildren()) do
-            if plot:IsA("Model") or plot:IsA("Folder") then
-                local matched = false
-                local matchScore = 0
-
-                local ownerAttr = plot:GetAttribute("owner")
-                if typeof(ownerAttr) == "string" then
-                    local owner = ownerAttr:lower()
-                    if owner == playerName or owner == displayName then
-                        matched = true
-                        matchScore = 100
-                    end
-                elseif typeof(ownerAttr) == "number" and ownerAttr == LocalPlayer.UserId then
-                    matched = true
-                    matchScore = 100
-                end
-
-                local playerSign = plot:FindFirstChild("PlayerSign", true)
-                if playerSign then
-                    local billboard = playerSign:FindFirstChild("BillboardGui", true)
-                    if billboard then
-                        local label = billboard:FindFirstChild("TextLabel", true)
-                        if label and label:IsA("TextLabel") then
-                            local textValue = tostring(label.Text or ""):lower()
-                            if textValue == playerName or textValue == displayName then
-                                matched = true
-                                matchScore = math.max(matchScore, 120)
-                            elseif textValue:find(playerName, 1, true) or textValue:find(displayName, 1, true) then
-                                matched = true
-                                matchScore = math.max(matchScore, 110)
-                            end
-                        end
-                    end
-                end
-
-                -- Also accept a direct plot/name match as a fallback within Plots only.
-                local plotName = plot.Name:lower()
-                if plotName == playerName or plotName == displayName then
-                    matched = true
-                    matchScore = math.max(matchScore, 90)
-                end
-
-                if matched then
-                    local part = findReturnPart(plot)
-                    if part then
-                        cachedBasePart = part
-                        cachedBaseScore = matchScore + baseNameScore(plot)
-                        print("[OLIVER] MY PLOT FOUND:", plot:GetFullName(), "RETURN:", part:GetFullName(), "score=", cachedBaseScore)
-                        return cachedBasePart
-                    end
-                end
-            end
-        end
-    end
-
-    -- Secondary ownership scan for games/updates where the plot container is not
-    -- directly under Workspace.Plots. Never fall back to nearest Base/Plot.
     local keywords = {"base", "bases", "ranch", "ranches", "plot", "plots", "home"}
     local function hasKeyword(name)
         name = name:lower()
@@ -1299,26 +1282,76 @@ local function findPlayerBase()
         return false
     end
 
+    local function consider(obj, score)
+        local part = findReturnPart(obj)
+        if not part then return end
+        if score > cachedBaseScore then
+            cachedBaseScore = score
+            cachedBasePart = part
+        end
+    end
+
+    -- Priority #1: the visible in-game ownership marker: "Your Ranch".
+    -- This is stronger than distance or a generic Base/Plot name.
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if hasKeyword(obj.Name) then
-            local ownerScore = candidateOwnerMatch(obj)
-            if ownerScore > 0 then
-                local part = findReturnPart(obj)
-                if part then
-                    local score = ownerScore + baseNameScore(obj)
-                    if score > cachedBaseScore then
-                        cachedBaseScore = score
-                        cachedBasePart = part
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            local ok, text = pcall(function() return obj.Text end)
+            if ok and normalizeRanchText(text) == "Your Ranch" then
+                local container = obj.Parent
+                local bestContainer = container
+                local bestPart = nil
+
+                -- Move from the Billboard/UI object toward the world model and
+                -- stop at a useful ranch/plot/base/home container.
+                for _ = 1, 10 do
+                    if not container then break end
+                    if hasKeyword(container.Name) then
+                        bestContainer = container
+                    end
+                    local p = findReturnPart(container)
+                    if p then bestPart = p end
+                    container = container.Parent
+                end
+
+                if bestContainer then
+                    local p = findReturnPart(bestContainer) or bestPart
+                    if p then
+                        local score = 1000 + baseNameScore(bestContainer)
+                        if score > cachedBaseScore then
+                            cachedBaseScore = score
+                            cachedBasePart = p
+                        end
                     end
                 end
             end
         end
     end
 
+    -- Priority #2: explicit owner markers / username markers.
+    if not cachedBasePart then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if hasKeyword(obj.Name) then
+                local part = findReturnPart(obj)
+                if part then
+                    local ownerScore = candidateOwnerMatch(obj)
+                    if ownerScore > 0 then
+                        local score = 100 + ownerScore + baseNameScore(obj)
+                        if score > cachedBaseScore then
+                            cachedBaseScore = score
+                            cachedBasePart = part
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- IMPORTANT: no nearest-plot fallback. If ownership cannot be proven,
+    -- return nil instead of risking another player's ranch.
     if cachedBasePart then
-        print("[OLIVER] MY PLOT / OWN BASE FOUND:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
+        print("[OLIVER] YOUR RANCH RETURN:", cachedBasePart:GetFullName(), "score=", cachedBaseScore)
     else
-        warn("[OLIVER] My Plot was not found by ownership/sign detection")
+        warn("[OLIVER] Your Ranch / player-owned Ranch was not found")
     end
 
     return cachedBasePart
