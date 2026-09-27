@@ -166,8 +166,8 @@ toggleCorner.Parent = ToggleBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 238, 0, 335)
-MainFrame.Position = UDim2.new(0.5, -119, 0.5, -167)
+MainFrame.Size = UDim2.new(0, 238, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -119, 0.5, -160)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
@@ -243,30 +243,13 @@ local function makeMainButton(name, textValue, y, height)
     return b
 end
 
-local AutoStealBtn = makeMainButton("AutoSteal", "Auto Steal | OFF", 4, 48)
-
-local HoldLabel = Instance.new("TextLabel")
-HoldLabel.Name = "Hold"
-HoldLabel.Size = UDim2.new(1, 0, 0, 23)
-HoldLabel.Position = UDim2.new(0, 0, 0, 57)
-HoldLabel.BackgroundTransparency = 1
-HoldLabel.Text = "Hold 0.0s"
-HoldLabel.TextColor3 = Color3.fromRGB(180, 185, 195)
-HoldLabel.Font = Enum.Font.SourceSans
-HoldLabel.TextSize = 14
-HoldLabel.TextXAlignment = Enum.TextXAlignment.Left
-HoldLabel.Parent = Content
-
-
-local ESPEggBtn = makeMainButton("ESPEgg", "ESP EGG | OFF", 94, 34)
-
-local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 133, 43)
-
-local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 181, 43)
-
-local EggTypeBtn = makeMainButton("EggType", "Select Egg Type | All", 229, 43)
-
-local ReturnBtn = makeMainButton("ReturnTo", "Return To | Base ▼", 276, 43)
+-- Compact layout: every main function stays inside the panel with no scrolling.
+local AutoStealBtn = makeMainButton("AutoSteal", "Auto Steal | OFF", 4, 38)
+local ESPEggBtn = makeMainButton("ESPEgg", "ESP EGG | OFF", 48, 38)
+local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 92, 38)
+local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 136, 38)
+local EggTypeBtn = makeMainButton("EggType", "Select Egg Type | All", 180, 38)
+local ReturnBtn = makeMainButton("ReturnTo", "Return To | Base ▼", 224, 38)
 
 local ReturnFrame = Instance.new("Frame")
 ReturnFrame.Name = "ReturnToPanel"
@@ -2211,7 +2194,6 @@ print("[OLIVER] Mobile Auto Steal + ProximityPrompt | READY")
 
 AutoStealBtn.Text = "Auto Steal | OFF"
 AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
-HoldLabel.Text = "Hold 0.0s"
 Status.Text = "OFF"
 Status.TextColor3 = Color3.fromRGB(0, 210, 255)
 MapPanelBtn.Text = "Egg in Map | OFF"
