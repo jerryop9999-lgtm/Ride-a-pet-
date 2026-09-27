@@ -166,8 +166,8 @@ toggleCorner.Parent = ToggleBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 238, 0, 320)
-MainFrame.Position = UDim2.new(0.5, -119, 0.5, -160)
+MainFrame.Size = UDim2.new(0, 238, 0, 330)
+MainFrame.Position = UDim2.new(0.5, -119, 0.5, -165)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
@@ -221,6 +221,7 @@ Content.BackgroundTransparency = 1
 Content.Size = UDim2.new(1, -16, 1, -53)
 Content.Position = UDim2.new(0, 8, 0, 49)
 Content.BorderSizePixel = 0
+Content.ClipsDescendants = true
 Content.Parent = MainFrame
 
 local function makeMainButton(name, textValue, y, height)
@@ -243,13 +244,15 @@ local function makeMainButton(name, textValue, y, height)
     return b
 end
 
--- Compact layout: every main function stays inside the panel with no scrolling.
-local AutoStealBtn = makeMainButton("AutoSteal", "Auto Steal | OFF", 4, 38)
-local ESPEggBtn = makeMainButton("ESPEgg", "ESP EGG | OFF", 48, 38)
-local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 92, 38)
-local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 136, 38)
-local EggTypeBtn = makeMainButton("EggType", "Select Egg Type | All", 180, 38)
-local ReturnBtn = makeMainButton("ReturnTo", "Return To | Base ▼", 224, 38)
+-- Compact layout: main functions stay inside the panel; only Egg in Map uses scrolling.
+local AutoStealBtn = makeMainButton("AutoSteal", "Auto Steal | OFF\nHold 0.0s", 4, 48)
+AutoStealBtn.TextWrapped = true
+AutoStealBtn.TextYAlignment = Enum.TextYAlignment.Center
+local ESPEggBtn = makeMainButton("ESPEgg", "ESP EGG | OFF", 58, 38)
+local MapPanelBtn = makeMainButton("MapPanel", "Egg in Map | OFF", 102, 38)
+local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 146, 38)
+local EggTypeBtn = makeMainButton("EggType", "Select Egg Type | All", 190, 38)
+local ReturnBtn = makeMainButton("ReturnTo", "Return To | Base ▼", 234, 38)
 
 local ReturnFrame = Instance.new("Frame")
 ReturnFrame.Name = "ReturnToPanel"
@@ -399,10 +402,13 @@ end
 -- SEPARATE EGG-IN-MAP PANEL
 -- =========================================================
 
+local oldEggPanel = ScreenGui:FindFirstChild("EggInMapPanel")
+if oldEggPanel then oldEggPanel:Destroy() end
+
 local MapFrame = Instance.new("Frame")
 MapFrame.Name = "EggInMapPanel"
-MapFrame.Size = UDim2.new(0, 210, 0, 275)
-MapFrame.Position = UDim2.new(0.5, 125, 0.5, -137)
+MapFrame.Size = UDim2.new(0, 210, 0, 300)
+MapFrame.Position = UDim2.new(0.5, 125, 0.5, -150)
 MapFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MapFrame.BorderSizePixel = 0
 MapFrame.Visible = false
@@ -439,12 +445,18 @@ MapTitle.TextSize = 17
 MapTitle.TextXAlignment = Enum.TextXAlignment.Left
 MapTitle.Parent = MapHeader
 
-local MapScroll = Instance.new("Frame")
+local MapScroll = Instance.new("ScrollingFrame")
 MapScroll.Name = "List"
 MapScroll.Size = UDim2.new(1, -12, 1, -50)
 MapScroll.Position = UDim2.new(0, 6, 0, 47)
 MapScroll.BackgroundTransparency = 1
 MapScroll.BorderSizePixel = 0
+MapScroll.ScrollBarThickness = 5
+MapScroll.ScrollBarImageTransparency = 0.1
+MapScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+MapScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+MapScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+MapScroll.ClipsDescendants = true
 MapScroll.Parent = MapFrame
 
 local mapLayout = Instance.new("UIListLayout")
@@ -2029,7 +2041,7 @@ end
 
 local function stopAutoSteal()
     autoSteal = false
-    AutoStealBtn.Text = "Auto Steal | OFF"
+    AutoStealBtn.Text = "Auto Steal | OFF\nHold 0.0s"
     AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
     Status.Text = "OFF"
     Status.TextColor3 = Color3.fromRGB(150, 155, 165)
@@ -2069,7 +2081,7 @@ connectTap(AutoStealBtn, function()
     end
 
     autoSteal = true
-    AutoStealBtn.Text = "Auto Steal | ON"
+    AutoStealBtn.Text = "Auto Steal | ON\nHold 0.0s"
     AutoStealBtn.BackgroundColor3 = Color3.fromRGB(0, 145, 90)
     Status.Text = "STEAL"
     Status.TextColor3 = Color3.fromRGB(0, 210, 255)
@@ -2192,7 +2204,7 @@ print("[OLIVER] Mobile Auto Steal + ProximityPrompt | READY")
 -- STARTUP
 -- =========================================================
 
-AutoStealBtn.Text = "Auto Steal | OFF"
+AutoStealBtn.Text = "Auto Steal | OFF\nHold 0.0s"
 AutoStealBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 Status.Text = "OFF"
 Status.TextColor3 = Color3.fromRGB(0, 210, 255)
@@ -2208,5 +2220,7 @@ SpeedBtn.Text = "SPEED | OFF"
 SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 
 -- All panels are independent. Main UI starts closed.
+Content.CanvasPosition = Vector2.new(0, 0)
+MapScroll.CanvasPosition = Vector2.new(0, 0)
 MainFrame.Visible = false
 MapFrame.Visible = false
