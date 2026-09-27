@@ -43,28 +43,40 @@ local function connectTap(button, callback)
     if not button then return end
     setupTouchButton(button)
 
-    local activeTouch = nil
-    local activeMouse = false
+    local activeInput = nil
+    local startPosition = nil
+    local moved = false
+    local TAP_THRESHOLD = 10
 
     button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            activeTouch = input
-        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            activeMouse = true
+        if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            activeInput = input
+            startPosition = input.Position
+            moved = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not activeInput or not startPosition then return end
+        if input.UserInputType ~= Enum.UserInputType.Touch
+            and input.UserInputType ~= Enum.UserInputType.MouseMovement then
+            return
+        end
+        local delta = input.Position - startPosition
+        if delta.Magnitude > TAP_THRESHOLD then
+            moved = true
         end
     end)
 
     button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            if activeTouch == input then
-                activeTouch = nil
-                callback()
-            end
-        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if activeMouse then
-                activeMouse = false
-                callback()
-            end
+        if activeInput ~= input then return end
+        local shouldActivate = not moved
+        activeInput = nil
+        startPosition = nil
+        moved = false
+        if shouldActivate then
+            callback()
         end
     end)
 end
