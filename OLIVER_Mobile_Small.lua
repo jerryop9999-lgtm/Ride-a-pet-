@@ -1348,6 +1348,59 @@ end
 -- Keep the character attached/hovering over the current Egg while the steal
 -- interaction is being confirmed. This is especially important for Eggs that
 -- spawn on trees or other places with no floor underneath.
+-- Noclip is active only while Auto Steal is ON.
+-- Original CanCollide values are restored when Auto Steal is turned OFF.
+local noclipConnection = nil
+local noclipOriginal = {}
+
+local function applyNoclipToCharacter(char)
+    if not char then return end
+
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            if noclipOriginal[obj] == nil then
+                noclipOriginal[obj] = obj.CanCollide
+            end
+            obj.CanCollide = false
+        end
+    end
+end
+
+local function startAutoStealNoclip()
+    if noclipConnection then return end
+
+    local char = LocalPlayer.Character
+    applyNoclipToCharacter(char)
+
+    noclipConnection = RunService.Stepped:Connect(function()
+        if not autoSteal then
+            return
+        end
+
+        local currentChar = LocalPlayer.Character
+        if currentChar then
+            applyNoclipToCharacter(currentChar)
+        end
+    end)
+end
+
+local function stopAutoStealNoclip()
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+
+    for part, originalValue in pairs(noclipOriginal) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = originalValue
+            end)
+        end
+    end
+
+    noclipOriginal = {}
+end
+
 local function lockToEgg(eggPart, heightOffset)
     local connection
     local offset = heightOffset or 1.25
@@ -1936,6 +1989,7 @@ local function stopAutoSteal()
     Status.TextColor3 = Color3.fromRGB(150, 155, 165)
 
     setMovementLocked(false)
+    stopAutoStealNoclip()
     disconnectEggSpawnWatchers()
     resetExpiredEggTarget()
     autoStealStartCFrame = nil
@@ -1967,6 +2021,7 @@ connectTap(AutoStealBtn, function()
     Status.TextColor3 = Color3.fromRGB(0, 210, 255)
 
     setMovementLocked(true)
+    startAutoStealNoclip()
     setupEggSpawnWatchers()
 
     task.spawn(function()
