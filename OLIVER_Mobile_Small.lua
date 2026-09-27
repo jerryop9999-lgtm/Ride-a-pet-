@@ -155,7 +155,7 @@ toggleCorner.Parent = ToggleBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 238, 0, 330)
+MainFrame.Size = UDim2.new(0, 238, 0, 380)
 MainFrame.Position = UDim2.new(0.5, -119, 0.5, -142)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MainFrame.BorderSizePixel = 0
@@ -254,17 +254,73 @@ local SpeedBtn = makeMainButton("Speed", "SPEED | OFF", 181, 43)
 
 local EggTypeBtn = makeMainButton("EggType", "Select Egg Type | All", 229, 43)
 
-local Info = Instance.new("TextLabel")
-Info.Size = UDim2.new(1, 0, 0, 38)
-Info.Position = UDim2.new(0, 0, 0, 276)
-Info.BackgroundTransparency = 1
-Info.Text = "Fast flight → Egg → confirm → Base"
-Info.TextColor3 = Color3.fromRGB(145, 150, 160)
-Info.Font = Enum.Font.SourceSans
-Info.TextSize = 12
-Info.TextWrapped = true
-Info.TextXAlignment = Enum.TextXAlignment.Left
-Info.Parent = Content
+local ReturnBtn = makeMainButton("ReturnTo", "Return To | Base ▼", 276, 43)
+
+local ReturnMenu = Instance.new("Frame")
+ReturnMenu.Name = "ReturnMenu"
+ReturnMenu.Size = UDim2.new(1, 0, 0, 86)
+ReturnMenu.Position = UDim2.new(0, 0, 0, 323)
+ReturnMenu.BackgroundColor3 = Color3.fromRGB(27, 30, 41)
+ReturnMenu.BorderSizePixel = 0
+ReturnMenu.Visible = false
+ReturnMenu.ZIndex = 20
+ReturnMenu.Parent = Content
+
+local returnMenuCorner = Instance.new("UICorner")
+returnMenuCorner.CornerRadius = UDim.new(0, 9)
+returnMenuCorner.Parent = ReturnMenu
+
+local ReturnBaseBtn = Instance.new("TextButton")
+ReturnBaseBtn.Name = "BaseOption"
+ReturnBaseBtn.Size = UDim2.new(1, -8, 0, 36)
+ReturnBaseBtn.Position = UDim2.new(0, 4, 0, 4)
+ReturnBaseBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+ReturnBaseBtn.Text = "Base"
+ReturnBaseBtn.TextColor3 = Color3.fromRGB(245, 245, 250)
+ReturnBaseBtn.Font = Enum.Font.SourceSansBold
+ReturnBaseBtn.TextSize = 14
+ReturnBaseBtn.BorderSizePixel = 0
+ReturnBaseBtn.ZIndex = 21
+ReturnBaseBtn.Parent = ReturnMenu
+setupTouchButton(ReturnBaseBtn)
+
+local ReturnStartBtn = Instance.new("TextButton")
+ReturnStartBtn.Name = "StartOption"
+ReturnStartBtn.Size = UDim2.new(1, -8, 0, 36)
+ReturnStartBtn.Position = UDim2.new(0, 4, 0, 45)
+ReturnStartBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
+ReturnStartBtn.Text = "Start Position"
+ReturnStartBtn.TextColor3 = Color3.fromRGB(245, 245, 250)
+ReturnStartBtn.Font = Enum.Font.SourceSansBold
+ReturnStartBtn.TextSize = 14
+ReturnStartBtn.BorderSizePixel = 0
+ReturnStartBtn.ZIndex = 21
+ReturnStartBtn.Parent = ReturnMenu
+setupTouchButton(ReturnStartBtn)
+
+local returnMode = "Base"
+local returnModeDisplay = {
+    Base = "Base",
+    Start = "Start Position",
+}
+
+connectTap(ReturnBtn, function()
+    ReturnMenu.Visible = not ReturnMenu.Visible
+end)
+
+local function selectReturnMode(mode)
+    returnMode = mode
+    ReturnBtn.Text = "Return To | " .. (returnModeDisplay[mode] or "Base") .. " ▼"
+    ReturnMenu.Visible = false
+end
+
+connectTap(ReturnBaseBtn, function()
+    selectReturnMode("Base")
+end)
+
+connectTap(ReturnStartBtn, function()
+    selectReturnMode("Start")
+end)
 
 makeDraggable(MainFrame, Header)
 
@@ -372,6 +428,7 @@ local autoSteal = false
 local stealBusy = false
 local autoStealStartCFrame = nil
 local capturedReturnBaseCFrame = nil
+local capturedReturnStartCFrame = nil
 local holdTime = 0.0
 local espEggEnabled = false
 local espEggFolder = nil
@@ -1794,7 +1851,14 @@ end
 -- =========================================================
 
 local function returnAfterSuccess()
-    local targetCFrame = capturedReturnBaseCFrame
+    local targetCFrame
+
+    if returnMode == "Start" then
+        targetCFrame = capturedReturnStartCFrame
+    else
+        targetCFrame = capturedReturnBaseCFrame
+    end
+
     if not targetCFrame then
         return false
     end
@@ -1872,24 +1936,21 @@ local function stealOneEgg(egg)
         return
     end
 
-    -- Move to the Egg and keep the character at the Egg while retrying.
+    -- Stay locked to the Egg until the game confirms the Egg is actually gone.
+    -- Lock is released ONLY after confirmEggTaken() succeeds, or when Auto Steal
+    -- is manually turned OFF.
     Status.Text = "GO EGG"
     teleportCharacter(eggPart.CFrame, 0.75)
     local releaseLock = lockToEgg(eggPart, 0.75)
 
     local taken = false
 
-    -- RETRY FOREVER:
-    -- Keep refreshing the Prompt and triggering it until the selected Egg
-    -- is actually removed from RenderedEggs. There is no fixed retry count.
     while autoSteal and not taken do
         if eggIsGone(egg) then
             taken = true
             break
         end
 
-        -- Egg/Prompt can refresh while we are waiting, so find the Prompt
-        -- again every retry instead of using a stale reference.
         prompt = getStealPrompt(egg)
         eggPart = getEggPart(egg)
 
@@ -1901,9 +1962,8 @@ local function stealOneEgg(egg)
             Status.Text = "PROMPT"
             triggerStealPrompt(prompt)
 
+            -- IMPORTANT: keep the Egg lock active while confirmation is pending.
             Status.Text = "CONFIRM"
-            -- Short confirmation window. If it fails, loop immediately
-            -- and trigger the Prompt again.
             taken = confirmEggTaken(egg, 1.25)
         else
             Status.Text = "RETRY"
@@ -1916,6 +1976,7 @@ local function stealOneEgg(egg)
         end
     end
 
+    -- Do not release the Egg lock before confirmation.
     releaseLock()
 
     if taken and autoSteal then
@@ -1926,77 +1987,9 @@ local function stealOneEgg(egg)
         end
         resetExpiredEggTarget()
     else
-        -- If the user turned Auto Steal OFF, stop without returning.
+        -- Auto Steal was turned OFF before confirmation, so stop safely.
         Status.Text = "WAIT"
         resetExpiredEggTarget()
-    end
-
-    stealBusy = false
-end
-
-
-local function stealOneEgg(egg)
-    if stealBusy or not autoSteal or not isValidEgg(egg) then return end
-    stealBusy = true
-
-    local eggPart = getEggPart(egg)
-    local prompt = getStealPrompt(egg)
-    if not eggPart or not prompt then
-        stealBusy = false
-        return
-    end
-
-    -- Move to the Egg. No mouse/touch Auto Click and no VirtualInput are used.
-    Status.Text = "GO EGG"
-    teleportCharacter(eggPart.CFrame, 0.75)
-    local releaseLock = lockToEgg(eggPart, 0.75)
-
-    -- Use the game's ProximityPrompt only. No click simulation or virtual input.
-    pcall(function()
-        prompt.HoldDuration = 0.0
-    end)
-
-    Status.Text = "PROMPT"
-
-    -- ACTIVATE ONLY THE EGG'S ProximityPrompt.
-    -- This is not a mouse/touch auto-click and does not use VirtualInput.
-    -- The screenshot shows the actual action is "Pick Up", so the prompt
-    -- must be fired after moving into range.
-    local triggered = false
-    pcall(function()
-        if typeof(fireproximityprompt) == "function" then
-            fireproximityprompt(prompt)
-            triggered = true
-        end
-    end)
-
-    -- Executor fallback: use the ProximityPrompt hold API itself.
-    if not triggered then
-        pcall(function()
-            prompt:InputHoldBegin()
-            task.wait(math.max(0, tonumber(prompt.HoldDuration) or 0))
-            prompt:InputHoldEnd()
-            triggered = true
-        end)
-    end
-
-    -- CONFIRM FIRST: wait until the selected Egg is really gone.
-    -- Only after confirmation do we return to Base, like the earlier build.
-    Status.Text = "CONFIRM"
-    local taken = confirmEggTaken(egg)
-
-    releaseLock()
-
-    if taken and autoSteal then
-        Status.Text = "RETURN"
-        local returned = returnAfterSuccess()
-        if returned then task.wait(2) end
-        resetExpiredEggTarget()
-    else
-        -- Never return to Base unless the Egg was confirmed taken.
-        Status.Text = "WAIT"
-        resetExpiredEggTarget()
-        task.wait(0.35)
     end
 
     stealBusy = false
@@ -2015,6 +2008,7 @@ local function stopAutoSteal()
     disconnectEggSpawnWatchers()
     resetExpiredEggTarget()
     autoStealStartCFrame = nil
+    capturedReturnStartCFrame = nil
     capturedReturnBaseCFrame = nil
 end
 
@@ -2028,9 +2022,16 @@ connectTap(AutoStealBtn, function()
     local root = char and char:FindFirstChild("HumanoidRootPart")
 
     autoStealStartCFrame = root and root.CFrame or nil
+    capturedReturnStartCFrame = autoStealStartCFrame
     capturedReturnBaseCFrame = getRanchCFrame()
 
-    if not capturedReturnBaseCFrame then
+    if returnMode == "Start" then
+        if not capturedReturnStartCFrame then
+            Status.Text = "NO START"
+            Status.TextColor3 = Color3.fromRGB(220, 150, 40)
+            return
+        end
+    elseif not capturedReturnBaseCFrame then
         Status.Text = "NO BASE"
         Status.TextColor3 = Color3.fromRGB(220, 150, 40)
         return
