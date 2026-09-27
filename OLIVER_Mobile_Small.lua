@@ -45,14 +45,17 @@ local function connectTap(button, callback)
 
     local activeInput = nil
     local startPosition = nil
+    local startCanvasY = nil
     local moved = false
     local TAP_THRESHOLD = 10
+    local SCROLL_CANCEL_THRESHOLD = 2
 
     button.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch
             or input.UserInputType == Enum.UserInputType.MouseButton1 then
             activeInput = input
             startPosition = input.Position
+            startCanvasY = (Content and Content.CanvasPosition.Y) or 0
             moved = false
         end
     end)
@@ -69,11 +72,22 @@ local function connectTap(button, callback)
         end
     end)
 
+    -- A ScrollingFrame can consume the touch before the button receives a
+    -- large movement event. Watch CanvasPosition too, so scrolling ALWAYS
+    -- cancels the pending button tap.
+    RunService.RenderStepped:Connect(function()
+        if not activeInput or startCanvasY == nil or not Content then return end
+        if math.abs(Content.CanvasPosition.Y - startCanvasY) > SCROLL_CANCEL_THRESHOLD then
+            moved = true
+        end
+    end)
+
     button.InputEnded:Connect(function(input)
         if activeInput ~= input then return end
         local shouldActivate = not moved
         activeInput = nil
         startPosition = nil
+        startCanvasY = nil
         moved = false
         if shouldActivate then
             callback()
@@ -227,6 +241,8 @@ Content.ScrollBarImageTransparency = 0
 Content.ScrollBarImageColor3 = Color3.fromRGB(170, 175, 185)
 Content.ScrollingDirection = Enum.ScrollingDirection.Y
 Content.ScrollingEnabled = true
+Content.Active = true
+Content.ClipsDescendants = true
 Content.Active = true
 Content.CanvasSize = UDim2.new(0, 0, 0, 360)
 Content.AutomaticCanvasSize = Enum.AutomaticSize.None
