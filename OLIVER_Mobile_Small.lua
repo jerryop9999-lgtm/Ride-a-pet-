@@ -155,8 +155,8 @@ toggleCorner.Parent = ToggleBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 238, 0, 380)
-MainFrame.Position = UDim2.new(0.5, -119, 0.5, -142)
+MainFrame.Size = UDim2.new(0, 238, 0, 335)
+MainFrame.Position = UDim2.new(0.5, -119, 0.5, -167)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
@@ -204,11 +204,18 @@ Status.TextSize = 11
 Status.TextXAlignment = Enum.TextXAlignment.Right
 Status.Parent = Header
 
-local Content = Instance.new("Frame")
+local Content = Instance.new("ScrollingFrame")
 Content.Name = "Content"
 Content.BackgroundTransparency = 1
 Content.Size = UDim2.new(1, -16, 1, -53)
 Content.Position = UDim2.new(0, 8, 0, 49)
+Content.BorderSizePixel = 0
+Content.ScrollBarThickness = 4
+Content.ScrollBarImageTransparency = 0.25
+Content.ScrollingDirection = Enum.ScrollingDirection.Y
+Content.CanvasSize = UDim2.new(0, 0, 0, 325)
+Content.AutomaticCanvasSize = Enum.AutomaticSize.None
+Content.ClipsDescendants = true
 Content.Parent = MainFrame
 
 local function makeMainButton(name, textValue, y, height)
@@ -306,12 +313,24 @@ local returnModeDisplay = {
 
 connectTap(ReturnBtn, function()
     ReturnMenu.Visible = not ReturnMenu.Visible
+    if ReturnMenu.Visible then
+        -- Give the Return To options a little extra scroll space.
+        Content.CanvasSize = UDim2.new(0, 0, 0, 420)
+        task.defer(function()
+            Content.CanvasPosition = Vector2.new(0, math.max(0, Content.AbsoluteCanvasSize.Y - Content.AbsoluteWindowSize.Y))
+        end)
+    else
+        Content.CanvasSize = UDim2.new(0, 0, 0, 325)
+        Content.CanvasPosition = Vector2.new(0, 0)
+    end
 end)
 
 local function selectReturnMode(mode)
     returnMode = mode
     ReturnBtn.Text = "Return To | " .. (returnModeDisplay[mode] or "Base") .. " ▼"
     ReturnMenu.Visible = false
+    Content.CanvasSize = UDim2.new(0, 0, 0, 325)
+    Content.CanvasPosition = Vector2.new(0, 0)
 end
 
 connectTap(ReturnBaseBtn, function()
