@@ -1348,46 +1348,69 @@ end
 -- Keep the character attached/hovering over the current Egg while the steal
 -- interaction is being confirmed. This is especially important for Eggs that
 -- spawn on trees or other places with no floor underneath.
--- Noclip is active only while Auto Steal is ON.
--- Original CanCollide values are restored when Auto Steal is turned OFF.
-local noclipConnection = nil
+-- Lightweight Noclip: no per-frame character scan.
+-- It only changes character BaseParts when Auto Steal starts or
+-- when a new character part is added. This avoids the frame-by-frame
+-- CanCollide writes that can cause mobile/Delta instability.
+local noclipCharacterConnection = nil
+local noclipDescendantConnection = nil
 local noclipOriginal = {}
 
-local function applyNoclipToCharacter(char)
-    if not char then return end
-
-    for _, obj in ipairs(char:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            if noclipOriginal[obj] == nil then
-                noclipOriginal[obj] = obj.CanCollide
-            end
-            obj.CanCollide = false
-        end
+local function applyNoclipPart(obj)
+    if not obj or not obj:IsA("BasePart") then return end
+    if noclipOriginal[obj] == nil then
+        noclipOriginal[obj] = obj.CanCollide
+    end
+    if obj.CanCollide then
+        obj.CanCollide = false
     end
 end
 
-local function startAutoStealNoclip()
-    if noclipConnection then return end
+local function applyNoclipToCharacter(char)
+    if not char then return end
+    for _, obj in ipairs(char:GetDescendants()) do
+        applyNoclipPart(obj)
+    end
+end
 
-    local char = LocalPlayer.Character
+local function hookNoclipCharacter(char)
+    if noclipDescendantConnection then
+        noclipDescendantConnection:Disconnect()
+        noclipDescendantConnection = nil
+    end
+    if not char then return end
+
     applyNoclipToCharacter(char)
-
-    noclipConnection = RunService.Stepped:Connect(function()
-        if not autoSteal then
-            return
+    noclipDescendantConnection = char.DescendantAdded:Connect(function(obj)
+        if autoSteal then
+            applyNoclipPart(obj)
         end
+    end)
+end
 
-        local currentChar = LocalPlayer.Character
-        if currentChar then
-            applyNoclipToCharacter(currentChar)
+local function startAutoStealNoclip()
+    if noclipCharacterConnection then return end
+
+    hookNoclipCharacter(LocalPlayer.Character)
+    noclipCharacterConnection = LocalPlayer.CharacterAdded:Connect(function(char)
+        if autoSteal then
+            task.defer(function()
+                if autoSteal and char and char.Parent then
+                    hookNoclipCharacter(char)
+                end
+            end)
         end
     end)
 end
 
 local function stopAutoStealNoclip()
-    if noclipConnection then
-        noclipConnection:Disconnect()
-        noclipConnection = nil
+    if noclipCharacterConnection then
+        noclipCharacterConnection:Disconnect()
+        noclipCharacterConnection = nil
+    end
+    if noclipDescendantConnection then
+        noclipDescendantConnection:Disconnect()
+        noclipDescendantConnection = nil
     end
 
     for part, originalValue in pairs(noclipOriginal) do
@@ -1397,7 +1420,6 @@ local function stopAutoStealNoclip()
             end)
         end
     end
-
     noclipOriginal = {}
 end
 
