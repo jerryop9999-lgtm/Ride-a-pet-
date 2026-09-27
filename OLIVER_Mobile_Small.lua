@@ -45,17 +45,14 @@ local function connectTap(button, callback)
 
     local activeInput = nil
     local startPosition = nil
-    local startCanvasY = nil
     local moved = false
     local TAP_THRESHOLD = 10
-    local SCROLL_CANCEL_THRESHOLD = 2
 
     button.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch
             or input.UserInputType == Enum.UserInputType.MouseButton1 then
             activeInput = input
             startPosition = input.Position
-            startCanvasY = (Content and Content.CanvasPosition.Y) or 0
             moved = false
         end
     end)
@@ -66,18 +63,7 @@ local function connectTap(button, callback)
             and input.UserInputType ~= Enum.UserInputType.MouseMovement then
             return
         end
-        local delta = input.Position - startPosition
-        if delta.Magnitude > TAP_THRESHOLD then
-            moved = true
-        end
-    end)
-
-    -- A ScrollingFrame can consume the touch before the button receives a
-    -- large movement event. Watch CanvasPosition too, so scrolling ALWAYS
-    -- cancels the pending button tap.
-    RunService.RenderStepped:Connect(function()
-        if not activeInput or startCanvasY == nil or not Content then return end
-        if math.abs(Content.CanvasPosition.Y - startCanvasY) > SCROLL_CANCEL_THRESHOLD then
+        if (input.Position - startPosition).Magnitude > TAP_THRESHOLD then
             moved = true
         end
     end)
@@ -87,7 +73,6 @@ local function connectTap(button, callback)
         local shouldActivate = not moved
         activeInput = nil
         startPosition = nil
-        startCanvasY = nil
         moved = false
         if shouldActivate then
             callback()
@@ -230,23 +215,12 @@ Status.TextSize = 11
 Status.TextXAlignment = Enum.TextXAlignment.Right
 Status.Parent = Header
 
-local Content = Instance.new("ScrollingFrame")
+local Content = Instance.new("Frame")
 Content.Name = "Content"
 Content.BackgroundTransparency = 1
 Content.Size = UDim2.new(1, -16, 1, -53)
 Content.Position = UDim2.new(0, 8, 0, 49)
 Content.BorderSizePixel = 0
-Content.ScrollBarThickness = 7
-Content.ScrollBarImageTransparency = 0
-Content.ScrollBarImageColor3 = Color3.fromRGB(170, 175, 185)
-Content.ScrollingDirection = Enum.ScrollingDirection.Y
-Content.ScrollingEnabled = true
-Content.Active = true
-Content.ClipsDescendants = true
-Content.Active = true
-Content.CanvasSize = UDim2.new(0, 0, 0, 360)
-Content.AutomaticCanvasSize = Enum.AutomaticSize.None
-Content.ClipsDescendants = true
 Content.Parent = MainFrame
 
 local function makeMainButton(name, textValue, y, height)
@@ -294,47 +268,82 @@ local EggTypeBtn = makeMainButton("EggType", "Select Egg Type | All", 229, 43)
 
 local ReturnBtn = makeMainButton("ReturnTo", "Return To | Base ▼", 276, 43)
 
-local ReturnMenu = Instance.new("Frame")
-ReturnMenu.Name = "ReturnMenu"
-ReturnMenu.Size = UDim2.new(1, 0, 0, 86)
-ReturnMenu.Position = UDim2.new(0, 0, 0, 323)
-ReturnMenu.BackgroundColor3 = Color3.fromRGB(27, 30, 41)
-ReturnMenu.BorderSizePixel = 0
-ReturnMenu.Visible = false
-ReturnMenu.ZIndex = 20
-ReturnMenu.Parent = Content
+local ReturnFrame = Instance.new("Frame")
+ReturnFrame.Name = "ReturnToPanel"
+ReturnFrame.Size = UDim2.new(0, 210, 0, 170)
+ReturnFrame.Position = UDim2.new(0.5, -105, 0.5, -85)
+ReturnFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
+ReturnFrame.BorderSizePixel = 0
+ReturnFrame.Visible = false
+ReturnFrame.ZIndex = 30
+ReturnFrame.Parent = ScreenGui
 
-local returnMenuCorner = Instance.new("UICorner")
-returnMenuCorner.CornerRadius = UDim.new(0, 9)
-returnMenuCorner.Parent = ReturnMenu
+local returnCorner = Instance.new("UICorner")
+returnCorner.CornerRadius = UDim.new(0, 13)
+returnCorner.Parent = ReturnFrame
+
+local returnStroke = Instance.new("UIStroke")
+returnStroke.Thickness = 1.1
+returnStroke.Color = Color3.fromRGB(75, 120, 255)
+returnStroke.Parent = ReturnFrame
+
+local ReturnHeader = Instance.new("Frame")
+ReturnHeader.Size = UDim2.new(1, 0, 0, 43)
+ReturnHeader.BackgroundColor3 = Color3.fromRGB(24, 27, 38)
+ReturnHeader.BorderSizePixel = 0
+ReturnHeader.ZIndex = 31
+ReturnHeader.Parent = ReturnFrame
+
+local returnHeaderCorner = Instance.new("UICorner")
+returnHeaderCorner.CornerRadius = UDim.new(0, 13)
+returnHeaderCorner.Parent = ReturnHeader
+
+local ReturnTitle = Instance.new("TextLabel")
+ReturnTitle.BackgroundTransparency = 1
+ReturnTitle.Size = UDim2.new(1, -16, 1, 0)
+ReturnTitle.Position = UDim2.new(0, 9, 0, 0)
+ReturnTitle.Text = "Return To"
+ReturnTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+ReturnTitle.Font = Enum.Font.SourceSansBold
+ReturnTitle.TextSize = 17
+ReturnTitle.TextXAlignment = Enum.TextXAlignment.Left
+ReturnTitle.ZIndex = 32
+ReturnTitle.Parent = ReturnHeader
 
 local ReturnBaseBtn = Instance.new("TextButton")
 ReturnBaseBtn.Name = "BaseOption"
-ReturnBaseBtn.Size = UDim2.new(1, -8, 0, 36)
-ReturnBaseBtn.Position = UDim2.new(0, 4, 0, 4)
+ReturnBaseBtn.Size = UDim2.new(1, -16, 0, 48)
+ReturnBaseBtn.Position = UDim2.new(0, 8, 0, 54)
 ReturnBaseBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 ReturnBaseBtn.Text = "Base"
 ReturnBaseBtn.TextColor3 = Color3.fromRGB(245, 245, 250)
 ReturnBaseBtn.Font = Enum.Font.SourceSansBold
-ReturnBaseBtn.TextSize = 14
+ReturnBaseBtn.TextSize = 15
 ReturnBaseBtn.BorderSizePixel = 0
-ReturnBaseBtn.ZIndex = 21
-ReturnBaseBtn.Parent = ReturnMenu
+ReturnBaseBtn.ZIndex = 32
+ReturnBaseBtn.Parent = ReturnFrame
 setupTouchButton(ReturnBaseBtn)
 
 local ReturnStartBtn = Instance.new("TextButton")
 ReturnStartBtn.Name = "StartOption"
-ReturnStartBtn.Size = UDim2.new(1, -8, 0, 36)
-ReturnStartBtn.Position = UDim2.new(0, 4, 0, 45)
+ReturnStartBtn.Size = UDim2.new(1, -16, 0, 48)
+ReturnStartBtn.Position = UDim2.new(0, 8, 0, 111)
 ReturnStartBtn.BackgroundColor3 = Color3.fromRGB(40, 43, 55)
 ReturnStartBtn.Text = "Start Position"
 ReturnStartBtn.TextColor3 = Color3.fromRGB(245, 245, 250)
 ReturnStartBtn.Font = Enum.Font.SourceSansBold
-ReturnStartBtn.TextSize = 14
+ReturnStartBtn.TextSize = 15
 ReturnStartBtn.BorderSizePixel = 0
-ReturnStartBtn.ZIndex = 21
-ReturnStartBtn.Parent = ReturnMenu
+ReturnStartBtn.ZIndex = 32
+ReturnStartBtn.Parent = ReturnFrame
 setupTouchButton(ReturnStartBtn)
+
+local returnBaseCorner = Instance.new("UICorner")
+returnBaseCorner.CornerRadius = UDim.new(0, 9)
+returnBaseCorner.Parent = ReturnBaseBtn
+local returnStartCorner = Instance.new("UICorner")
+returnStartCorner.CornerRadius = UDim.new(0, 9)
+returnStartCorner.Parent = ReturnStartBtn
 
 local returnMode = "Base"
 local returnModeDisplay = {
@@ -343,25 +352,16 @@ local returnModeDisplay = {
 }
 
 connectTap(ReturnBtn, function()
-    ReturnMenu.Visible = not ReturnMenu.Visible
-    if ReturnMenu.Visible then
-        -- Give the Return To options a little extra scroll space.
-        Content.CanvasSize = UDim2.new(0, 0, 0, 470)
-        task.defer(function()
-            Content.CanvasPosition = Vector2.new(0, math.max(0, Content.AbsoluteCanvasSize.Y - Content.AbsoluteWindowSize.Y))
-        end)
-    else
-        Content.CanvasSize = UDim2.new(0, 0, 0, 360)
-        Content.CanvasPosition = Vector2.new(0, 0)
+    ReturnFrame.Visible = not ReturnFrame.Visible
+    if ReturnFrame.Visible then
+        ReturnFrame.Position = UDim2.new(0.5, -105, 0.5, -85)
     end
 end)
 
 local function selectReturnMode(mode)
     returnMode = mode
     ReturnBtn.Text = "Return To | " .. (returnModeDisplay[mode] or "Base") .. " ▼"
-    ReturnMenu.Visible = false
-    Content.CanvasSize = UDim2.new(0, 0, 0, 360)
-    Content.CanvasPosition = Vector2.new(0, 0)
+    ReturnFrame.Visible = false
 end
 
 connectTap(ReturnBaseBtn, function()
@@ -371,6 +371,8 @@ end)
 connectTap(ReturnStartBtn, function()
     selectReturnMode("Start")
 end)
+
+makeDraggable(ReturnFrame, ReturnHeader)
 
 makeDraggable(MainFrame, Header)
 
@@ -421,6 +423,7 @@ MapFrame.Position = UDim2.new(0.5, 125, 0.5, -137)
 MapFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
 MapFrame.BorderSizePixel = 0
 MapFrame.Visible = false
+ReturnFrame.Visible = false
 MapFrame.Parent = ScreenGui
 
 local mapCorner = Instance.new("UICorner")
@@ -453,14 +456,12 @@ MapTitle.TextSize = 17
 MapTitle.TextXAlignment = Enum.TextXAlignment.Left
 MapTitle.Parent = MapHeader
 
-local MapScroll = Instance.new("ScrollingFrame")
+local MapScroll = Instance.new("Frame")
 MapScroll.Name = "List"
 MapScroll.Size = UDim2.new(1, -12, 1, -50)
 MapScroll.Position = UDim2.new(0, 6, 0, 47)
 MapScroll.BackgroundTransparency = 1
 MapScroll.BorderSizePixel = 0
-MapScroll.ScrollBarThickness = 4
-MapScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 MapScroll.Parent = MapFrame
 
 local mapLayout = Instance.new("UIListLayout")
@@ -711,14 +712,12 @@ EggTypeTitle.TextSize = 17
 EggTypeTitle.TextXAlignment = Enum.TextXAlignment.Left
 EggTypeTitle.Parent = EggTypeHeader
 
-local EggTypeScroll = Instance.new("ScrollingFrame")
+local EggTypeScroll = Instance.new("Frame")
 EggTypeScroll.Name = "List"
 EggTypeScroll.Size = UDim2.new(1, -12, 1, -50)
 EggTypeScroll.Position = UDim2.new(0, 6, 0, 47)
 EggTypeScroll.BackgroundTransparency = 1
 EggTypeScroll.BorderSizePixel = 0
-EggTypeScroll.ScrollBarThickness = 4
-EggTypeScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 EggTypeScroll.Parent = EggTypeFrame
 
 local eggTypeLayout = Instance.new("UIListLayout")
@@ -802,7 +801,6 @@ for _, eggType in ipairs(EggTypes) do
     makeEggTypeOption(eggType)
 end
 
-EggTypeScroll.CanvasSize = UDim2.new(0, 0, 0, (#EggTypes + 1) * 32 + 5)
 
 eggTypeButtons.All.MouseButton1Click:Connect(function()
     eggTypeAll = true
@@ -2194,8 +2192,7 @@ local function refreshMapPanel()
         rowOrder = 1
     end
 
-    MapScroll.CanvasSize = UDim2.new(0, 0, 0, rowOrder * 29 + 5)
-end
+    end
 
 task.spawn(function()
     while ScreenGui.Parent do
