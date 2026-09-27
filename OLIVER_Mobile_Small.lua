@@ -210,10 +210,13 @@ Content.BackgroundTransparency = 1
 Content.Size = UDim2.new(1, -16, 1, -53)
 Content.Position = UDim2.new(0, 8, 0, 49)
 Content.BorderSizePixel = 0
-Content.ScrollBarThickness = 4
-Content.ScrollBarImageTransparency = 0.25
+Content.ScrollBarThickness = 7
+Content.ScrollBarImageTransparency = 0
+Content.ScrollBarImageColor3 = Color3.fromRGB(170, 175, 185)
 Content.ScrollingDirection = Enum.ScrollingDirection.Y
-Content.CanvasSize = UDim2.new(0, 0, 0, 325)
+Content.ScrollingEnabled = true
+Content.Active = true
+Content.CanvasSize = UDim2.new(0, 0, 0, 360)
 Content.AutomaticCanvasSize = Enum.AutomaticSize.None
 Content.ClipsDescendants = true
 Content.Parent = MainFrame
@@ -315,12 +318,12 @@ connectTap(ReturnBtn, function()
     ReturnMenu.Visible = not ReturnMenu.Visible
     if ReturnMenu.Visible then
         -- Give the Return To options a little extra scroll space.
-        Content.CanvasSize = UDim2.new(0, 0, 0, 420)
+        Content.CanvasSize = UDim2.new(0, 0, 0, 470)
         task.defer(function()
             Content.CanvasPosition = Vector2.new(0, math.max(0, Content.AbsoluteCanvasSize.Y - Content.AbsoluteWindowSize.Y))
         end)
     else
-        Content.CanvasSize = UDim2.new(0, 0, 0, 325)
+        Content.CanvasSize = UDim2.new(0, 0, 0, 360)
         Content.CanvasPosition = Vector2.new(0, 0)
     end
 end)
@@ -329,7 +332,7 @@ local function selectReturnMode(mode)
     returnMode = mode
     ReturnBtn.Text = "Return To | " .. (returnModeDisplay[mode] or "Base") .. " ▼"
     ReturnMenu.Visible = false
-    Content.CanvasSize = UDim2.new(0, 0, 0, 325)
+    Content.CanvasSize = UDim2.new(0, 0, 0, 360)
     Content.CanvasPosition = Vector2.new(0, 0)
 end
 
